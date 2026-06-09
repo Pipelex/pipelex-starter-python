@@ -1,6 +1,6 @@
 [project]
 name = "my-project"
-version = "0.8.0"
+version = "0.9.0"
 description = "Replace this with your project description"
 # authors = [{ name = "Your Name", email = "your.email@example.com" }]
 license = "MIT"
@@ -17,7 +17,7 @@ classifiers = [
 ]
 
 dependencies = [
-  "pipelex[mistralai,anthropic,google,google-genai,bedrock,fal]>=0.26.4",
+  "pipelex[mistralai,anthropic,google,google-genai,bedrock,fal]>=0.32.0",
 ]
 
 [tool.setuptools]
@@ -65,15 +65,25 @@ ignore_missing_imports = true
 module = ["json2html"]
 
 [tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.11"
 include = ["my_project", "tests"]
 analyzeUnannotatedFunctions = true
 deprecateTypingAliases = false
 disableBytesTypePromotions = true
 enableExperimentalFeatures = false
 enableTypeIgnoreComments = true
-exclude = ["**/node_modules", "**/__pycache__"]
+exclude = [
+  "**/__pycache__",
+  ".venv",
+  ".git",
+  "build",
+  "dist",
+  "**/node_modules",
+  "**/.*",
+]
 extraPaths = ["./tests"]
-pythonVersion = "3.11"
 reportAbstractUsage = "error"
 reportArgumentType = "error"
 reportAssertAlwaysTrue = "error"
