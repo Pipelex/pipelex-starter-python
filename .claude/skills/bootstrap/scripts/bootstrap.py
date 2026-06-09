@@ -39,6 +39,10 @@ TEMPLATE_TITLE = "My Project"  # human-facing display name (README H1)
 TEMPLATE_CAMEL = "MyProject"  # only ever seen inside the test class TestMyProject
 
 PACKAGE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+# PEP 503/508 distribution name: alphanumerics separated by single '.', '-' or
+# '_', starting and ending with an alphanumeric. uv/packaging reject anything
+# else (e.g. a name with spaces), so we validate before writing [project].name.
+DIST_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
 
 
 @dataclass(frozen=True)
@@ -67,6 +71,22 @@ def validate_package(package: str) -> None:
         )
     if keyword.iskeyword(package):
         sys.exit(f"Invalid package name {package!r}: it is a Python keyword.")
+
+
+def validate_dist(dist: str) -> None:
+    """The distribution name lands in [project].name, which uv/packaging validate.
+
+    --package is validated separately, and the default dist (package with
+    underscores swapped for dashes) is always valid — but --dist is an explicit
+    override that would otherwise reach pyproject.toml unchecked, so an input
+    like 'bad dist name' must be rejected here rather than failing `uv lock` on
+    the generated project.
+    """
+    if not DIST_RE.match(dist):
+        sys.exit(
+            f"Invalid distribution name {dist!r}: use letters, digits, '.', '-' or '_', "
+            "starting and ending with a letter or digit, no spaces (e.g. 'invoice-extractor')."
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -129,6 +149,20 @@ def resolve_license(value: str, holder: str | None, year: int) -> License:
 # --------------------------------------------------------------------------- #
 
 
+def toml_str(value: str) -> str:
+    """Render value as a TOML basic string: surrounding quotes plus escaping.
+
+    User-supplied fields (description, author name/email, license, repo URL) are
+    written straight into pyproject.toml, so a value containing a double-quote or
+    backslash — e.g. `Use "AI" agents` — would otherwise produce invalid TOML and
+    break `uv lock`/checks on the generated project. We escape backslash first
+    (so it doesn't double-escape the sequences added afterwards), then the quote
+    and the control characters TOML basic strings forbid bare.
+    """
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+    return f'"{escaped}"'
+
+
 def apply_name_tokens(text: str, names: Names) -> str:
     """Substitute every spelling of the template name with the new one.
 
@@ -147,23 +181,23 @@ def transform_pyproject(text: str, names: Names, opts: "Options") -> str:
     # Description: a real one-liner beats "Replace this with your project description".
     text = text.replace(
         'description = "Replace this with your project description"',
-        f'description = "{opts.description}"',
+        f"description = {toml_str(opts.description)}",
     )
 
     # License field: uv validates this against SPDX on `uv lock --locked`, so a
     # proprietary project needs a `LicenseRef-` expression, not free text.
     if opts.lic.spdx != "MIT":
-        text = text.replace('license = "MIT"', f'license = "{opts.lic.spdx}"')
+        text = text.replace('license = "MIT"', f"license = {toml_str(opts.lic.spdx)}")
 
     # Author: the line ships commented out. Fill in whatever we were given
     # (name, email, or both) and uncomment it; otherwise leave the template comment.
     author_inner = None
     if opts.author_name and opts.author_email:
-        author_inner = f'{{ name = "{opts.author_name}", email = "{opts.author_email}" }}'
+        author_inner = f"{{ name = {toml_str(opts.author_name)}, email = {toml_str(opts.author_email)} }}"
     elif opts.author_name:
-        author_inner = f'{{ name = "{opts.author_name}" }}'
+        author_inner = f"{{ name = {toml_str(opts.author_name)} }}"
     elif opts.author_email:
-        author_inner = f'{{ email = "{opts.author_email}" }}'
+        author_inner = f"{{ email = {toml_str(opts.author_email)} }}"
     if author_inner:
         text = text.replace(
             '# authors = [{ name = "Your Name", email = "your.email@example.com" }]',
@@ -174,9 +208,12 @@ def transform_pyproject(text: str, names: Names, opts: "Options") -> str:
     # comment. If not, the token pass below rewrites my-project -> dist and we
     # leave the `yourusername` placeholder + reminder comment in place on purpose.
     if opts.repo_url:
+        # Double backslashes so re.sub's replacement mini-language treats any
+        # backslash from toml_str() as literal rather than a group reference.
+        repository_line = f"Repository = {toml_str(opts.repo_url)}".replace("\\", "\\\\")
         text = re.sub(
             r'Repository = "[^"]*"(?:\s*#.*)?',
-            f'Repository = "{opts.repo_url}"',
+            repository_line,
             text,
         )
 
@@ -210,12 +247,15 @@ def transform_readme(text: str, names: Names, opts: "Options") -> str:
     if opts.clean:
         text = strip_template_block(text)
 
-    # Clone instructions: point them at the real repo if we have one.
+    # Clone instructions: point them at the real repo if we have one. A common
+    # GitHub URL already ends in `.git`, so strip it before re-appending (no
+    # `.git.git`) and before deriving the directory name (`cd repo`, not `cd repo.git`).
     if opts.repo_url:
-        repo_name = opts.repo_url.rstrip("/").rsplit("/", 1)[-1]
+        bare_url = opts.repo_url.removesuffix(".git")
+        repo_name = bare_url.rsplit("/", 1)[-1]
         text = text.replace(
             "git clone https://github.com/yourusername/your-repo-name.git",
-            f"git clone {opts.repo_url}.git",
+            f"git clone {bare_url}.git",
         )
         text = text.replace("cd your-repo-name", f"cd {repo_name}")
     else:
@@ -432,6 +472,7 @@ def main(argv: list[str]) -> None:
     package = args.package.strip()
     validate_package(package)
     dist = (args.dist or package.replace("_", "-")).strip()
+    validate_dist(dist)
     title = (args.title or title_from_package(package)).strip()
     names = Names(dist=dist, package=package, title=title, camel=camel_from_package(package))
 
