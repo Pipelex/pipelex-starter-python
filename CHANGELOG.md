@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- Track the `pipelex` keyword-only-arguments refactor branch via a temporary `[tool.uv.sources]` git pin (non-subject function parameters across the `pipelex/` public surface are now keyword-only).
+- Migrate `my_project/hello_world.py` to the renamed runtime API: `PipelexRunner` → `PipelexMTHDSProtocol`, `execute_pipeline()` → `execute()` (`PipelexRunner` was removed upstream when the runner became the MTHDS Protocol implementation).
+
 ## [v0.9.0] - 2026-06-06
 
 - Bump `pipelex` to `v0.32.0`: See `Pipelex` changelog [here](https://docs.pipelex.com/latest/changelog/)
