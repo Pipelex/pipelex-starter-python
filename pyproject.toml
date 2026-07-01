@@ -17,7 +17,8 @@ classifiers = [
 ]
 
 dependencies = [
-  "pipelex[mistralai,anthropic,google,google-genai,bedrock,fal]>=0.32.0",
+  "pipelex-sdk==0.1.1",
+  "python-dotenv>=1.0.0",
 ]
 
 [tool.setuptools]
@@ -26,7 +27,6 @@ include-package-data = true
 
 [project.optional-dependencies]
 dev = [
-  "boto3-stubs>=1.35.24",
   "mypy>=1.11.2",
   "pipelex-tools>=0.3.2",
   "pyright>=1.1.410",
@@ -34,12 +34,6 @@ dev = [
   "pytest-sugar>=1.0.0",
   "pytest_asyncio>=0.24.0",
   "ruff>=0.6.8",
-  "types-aioboto3[bedrock,bedrock-runtime]>=13.4.0",
-  "types-aiofiles>=24.1.0.20240626",
-  "types-markdown>=3.6.0.20240316",
-  "types-networkx>=3.3.0.20241020",
-  "types-openpyxl>=3.1.5.20250306",
-  "types-PyYAML>=6.0.12.20250326",
 ]
 
 [project.urls]
@@ -50,10 +44,6 @@ Documentation = "https://docs.pipelex.com/"
 [tool.uv]
 required-version = ">=0.7.2"
 
-[tool.uv.sources]
-# Temporary: track the keyword-only-arguments refactor branch of pipelex until it is released to PyPI.
-pipelex = { git = "https://github.com/Pipelex/pipelex.git", rev = "0e32c8c02600e17bbe146331f9b701ccc03a1ca1" }
-
 [tool.mypy]
 packages = ["my_project"]
 check_untyped_defs = true
@@ -63,10 +53,6 @@ plugins = ["pydantic.mypy"]
 python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
-
-[[tool.mypy.overrides]]
-ignore_missing_imports = true
-module = ["json2html"]
 
 [tool.pyright]
 venvPath = "."
@@ -173,7 +159,7 @@ strictParameterNoneValue = true
 strictSetInference = true
 typeCheckingMode = "strict"
 
-[tool.pytest]
+[tool.pytest.ini_options]
 minversion = "9.0"
 addopts = [
   "--import-mode=importlib",
@@ -181,6 +167,7 @@ addopts = [
   "-m",
   "not (inference or llm or img_gen or extract or needs_output or pipelex_api)",
 ]
+asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 xfail_strict = true
 filterwarnings = [

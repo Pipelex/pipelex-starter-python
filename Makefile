@@ -15,7 +15,6 @@ VENV_PYTEST := $(VIRTUAL_ENV)/bin/pytest
 VENV_RUFF := $(VIRTUAL_ENV)/bin/ruff
 VENV_PYRIGHT := $(VIRTUAL_ENV)/bin/pyright
 VENV_MYPY := $(VIRTUAL_ENV)/bin/mypy
-VENV_PIPELEX := $(VIRTUAL_ENV)/bin/pipelex
 VENV_PLXT := RUST_LOG=warn "$(VIRTUAL_ENV)/bin/plxt"
 
 UV_MIN_VERSION = $(shell grep -m1 'required-version' pyproject.toml | sed -E 's/.*= *"([^<>=, ]+).*/\1/')
@@ -50,7 +49,8 @@ make export-requirements      - Export production requirements.txt (no dev depen
 make export-requirements-dev  - Export requirements-dev.txt (all dependencies including dev)
 make er                       - Shorthand -> export-requirements
 make erd                      - Shorthand -> export-requirements-dev
-make validate                 - Run the setup sequence to validate the config and libraries
+make run                      - Run the hello_world example against the Pipelex API
+make validate                 - Lint/validate the .mthds bundle with plxt
 
 make format                   - Format all (ruff-format + plxt-format)
 make lint                     - Lint all (ruff-lint + plxt-lint)
@@ -99,7 +99,7 @@ export HELP
 
 .PHONY: \
 	all help env env-verbose check-uv check-uv-verbose lock install update build \
-	export-requirements export-requirements-dev er erd \
+	export-requirements export-requirements-dev er erd run \
 	format lint ruff-format ruff-lint plxt-format plxt-lint pyright mypy \
 	cleanderived cleanenv cleanall \
 	test t test-quiet tq test-with-prints tp test-inference ti \
@@ -188,9 +188,13 @@ er: export-requirements
 erd: export-requirements-dev
 	@echo "> done: erd = export-requirements-dev"
 
+run: env
+	$(call PRINT_TITLE,"Running the hello_world example against the Pipelex API")
+	$(VENV_PYTHON) -m my_project.hello_world
+
 validate: env
-	$(call PRINT_TITLE,"Running setup sequence")
-	$(VENV_PIPELEX) validate --all
+	$(call PRINT_TITLE,"Validating the .mthds bundle with plxt")
+	$(VENV_PLXT) lint
 
 ##############################################################################################
 ############################      Cleaning                        ############################
@@ -241,13 +245,13 @@ cleanall: cleanderived cleanenv cleanconfig
 
 codex-tests: env
 	$(call PRINT_TITLE,"Unit testing for Codex")
-	@echo "• Running unit tests for Codex (excluding inference and codex_disabled)"
-	$(VENV_PYTEST) --disable-inference --exitfirst --quiet -m "not inference and not codex_disabled" || [ $$? = 5 ]
+	@echo "• Running unit tests for Codex (excluding inference, pipelex_api and codex_disabled)"
+	$(VENV_PYTEST) --exitfirst --quiet -m "not inference and not pipelex_api and not codex_disabled" || [ $$? = 5 ]
 
 gha-tests: env
 	$(call PRINT_TITLE,"Unit testing for github actions")
-	@echo "• Running unit tests for github actions (excluding inference and gha_disabled)"
-	$(VENV_PYTEST) --disable-inference --exitfirst --quiet -m "not inference and not gha_disabled" || [ $$? = 5 ]
+	@echo "• Running unit tests for github actions (excluding inference, pipelex_api and gha_disabled)"
+	$(VENV_PYTEST) --exitfirst --quiet -m "not inference and not pipelex_api and not gha_disabled" || [ $$? = 5 ]
 
 run-all-tests: env
 	$(call PRINT_TITLE,"Running all unit tests")
@@ -309,9 +313,9 @@ tb: env
 test-inference: env
 	$(call PRINT_TITLE,"Unit testing")
 	@if [ -n "$(TEST)" ]; then \
-		$(VENV_PYTEST) --pipe-run-mode live --exitfirst -m "inference" -s -k "$(TEST)" $(if $(filter 1,$(VERBOSE)),-v,$(if $(filter 2,$(VERBOSE)),-vv,$(if $(filter 3,$(VERBOSE)),-vvv,))); \
+		$(VENV_PYTEST) --exitfirst -m "inference" -s -k "$(TEST)" $(if $(filter 1,$(VERBOSE)),-v,$(if $(filter 2,$(VERBOSE)),-vv,$(if $(filter 3,$(VERBOSE)),-vvv,))); \
 	else \
-		$(VENV_PYTEST) --pipe-run-mode live --exitfirst -m "inference" -s $(if $(filter 1,$(VERBOSE)),-v,$(if $(filter 2,$(VERBOSE)),-vv,$(if $(filter 3,$(VERBOSE)),-vvv,))); \
+		$(VENV_PYTEST) --exitfirst -m "inference" -s $(if $(filter 1,$(VERBOSE)),-v,$(if $(filter 2,$(VERBOSE)),-vv,$(if $(filter 3,$(VERBOSE)),-vvv,))); \
 	fi
 
 ti: test-inference
