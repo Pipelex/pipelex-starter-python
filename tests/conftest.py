@@ -1,15 +1,5 @@
-import pytest
-from rich import print
+from dotenv import load_dotenv
 
-pytest_plugins = [
-    "pipelex.test_extras.shared_pytest_plugins",
-]
-
-
-@pytest.fixture(scope="function", autouse=True)
-def pretty():
-    # Code to run before each test
-    print("\n")
-    yield
-    # Code to run after each test
-    print("\n")
+# Load .env so the Pipelex API client picks up PIPELEX_API_URL / PIPELEX_API_KEY
+# (the tests marked `pipelex_api` / `inference` reach the hosted API).
+load_dotenv()

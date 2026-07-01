@@ -1,10 +1,11 @@
-import runpy
-
 import pytest
 
+from my_project.hello_world import hello_world
 
-@pytest.mark.dry_runnable
+
 @pytest.mark.inference
+@pytest.mark.pipelex_api
 class TestMyProject:
-    def test_hello_world(self):
-        runpy.run_path("my_project/hello_world.py", run_name="__main__")
+    async def test_hello_world(self):
+        # Runs the pipeline end-to-end through the hosted Pipelex API (real inference).
+        await hello_world()

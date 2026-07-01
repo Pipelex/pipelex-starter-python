@@ -28,8 +28,3 @@ dist/
 results/
 
 temp/
-pipelex_super.toml
-pipelex_override.toml
-telemetry_override.toml
-.pipelex/storage
-.pipelex/traces

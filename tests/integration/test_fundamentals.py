@@ -1,21 +1,25 @@
 import pytest
-from pipelex.pipe_run.exceptions import DryRunError
-from pipelex.pipeline.bundle_validator import BundleValidator
+from pipelex_sdk.client import PipelexAPIClient
+
+from my_project.hello_world import BUNDLE_PATH
 
 
-# We use gha_disabled here because those tests are called directly and explicitly by the tests-check.yml file before the rest of the tests.
-@pytest.mark.gha_disabled
 class TestFundamentals:
     def test_boot(self):
-        # This test does nothing but the conftest runs Pipelex.make()
-        # Therefore this test will fail if Pipelex.make() fails.
-        pass
+        # Constructing the client resolves credentials + base URL (no network).
+        # This fails if PIPELEX_API_URL is malformed.
+        client = PipelexAPIClient()
+        assert client.api_base_url
 
-    @pytest.mark.asyncio(loop_scope="class")
-    async def test_dry_run_all_pipes(self):
-        # acquire_and_validate opens a fresh library, loads my_project, dry-runs every pipe, and tears
-        # the library down. It raises DryRunError aggregating any unexpected pipe failures.
-        try:
-            await BundleValidator().acquire_and_validate(library_dirs=["my_project"])
-        except DryRunError as dry_run_error:
-            pytest.fail(str(dry_run_error))
+    def test_bundle_exists(self):
+        assert BUNDLE_PATH.exists()
+        assert BUNDLE_PATH.read_text().strip()
+
+    @pytest.mark.pipelex_api
+    async def test_validate_bundle(self):
+        # Parse, validate, and dry-run the bundle through the hosted API.
+        # The verdict rides a 200 body (never raised); assert it is valid.
+        bundle = BUNDLE_PATH.read_text()
+        async with PipelexAPIClient() as client:
+            report = await client.validate([bundle])
+        assert report.is_valid, report.rendered_markdown
