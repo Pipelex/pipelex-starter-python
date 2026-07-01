@@ -23,7 +23,6 @@ Run specific tests (local only): `make tp TEST=test_function_name`
 
 - `make install` - Create venv + install all deps (uses uv)
 - `make li` - Lock + install
-- `make run` - Run the `hello_world` example against the Pipelex API
 - `make cleanderived` - Remove caches/compiled files (useful when linters get confused)
 - `make validate` / `make v` - Lint/validate the `.mthds` bundle with plxt (offline)
 - `make tb` - Quick boot test (constructs the API client, no network)

@@ -221,25 +221,34 @@ def transform_pyproject(text: str, names: Names, opts: "Options") -> str:
 
 
 def strip_template_block(text: str) -> str:
-    """Remove the README's template-only preamble (the 'Use this template' block).
+    """Remove the README's template-only scaffolding.
 
-    The block runs from the `*Replace "My Project" ...*` italic line down to the
-    `---` rule that closes it, just before `## Getting Started`. We anchor on
-    those two markers rather than line numbers so edits to the prose above don't
-    break us.
+    Two independent regions are template-only: the `*Replace "My Project" ...*`
+    reminder line right under the H1, and the whole `### Use this template`
+    subsection (with real project prose sitting *between* them). We anchor on the
+    heading text and the next H2 boundary rather than a `---` rule or line
+    numbers, so edits to the surrounding prose — and the absence of a closing
+    `---` — don't break us. Each lookup is a safe no-op when its marker is
+    already gone (e.g. a re-run), so the whole function is idempotent.
     """
     lines = text.splitlines()
-    start = next((i for i, ln in enumerate(lines) if ln.startswith('*Replace "')), None)
-    if start is None:
-        return text  # already stripped (e.g. re-run) — nothing to do
-    end = next((j for j in range(start + 1, len(lines)) if lines[j].strip() == "---"), None)
-    if end is None:
-        return text
-    del lines[start : end + 1]
+
+    # 1. The `### Use this template` subsection: from that heading up to (not
+    #    including) the next H2, or end-of-file if there is none.
+    use_start = next((i for i, ln in enumerate(lines) if ln.strip() == "### Use this template"), None)
+    if use_start is not None:
+        use_end = next((j for j in range(use_start + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
+        del lines[use_start:use_end]
+
+    # 2. The standalone `*Replace "My Project" ...*` reminder line.
+    replace_idx = next((i for i, ln in enumerate(lines) if ln.startswith('*Replace "')), None)
+    if replace_idx is not None:
+        del lines[replace_idx]
+
     out = "\n".join(lines)
     if text.endswith("\n"):
         out += "\n"
-    # Collapse the blank-line gap left behind so the H1 sits right above "## Getting Started".
+    # Collapse the blank-line gaps left behind by the deletions.
     return re.sub(r"\n{3,}", "\n\n", out)
 
 
@@ -286,9 +295,9 @@ def transform_license(text: str, opts: "Options") -> str:
                 count=1,
             )
         return text
-    holder = lic.holder or "<COPYRIGHT HOLDER>"
-    if not lic.holder:
-        print("warning: no --license-holder given; wrote a placeholder into LICENSE.", file=sys.stderr)
+    # main() rejects any non-MIT license without a holder before we get here, so
+    # a proprietary/SPDX notice can never ship with a placeholder copyright line.
+    holder = lic.holder
     if lic.kind == "proprietary":
         return PROPRIETARY_LICENSE.format(year=lic.year, holder=holder)
     print(
@@ -483,6 +492,11 @@ def main(argv: list[str]) -> None:
         (args.license_holder or "").strip() or None,
         license_year,
     )
+    # A proprietary / SPDX license notice is meaningless without a named holder,
+    # so refuse up front rather than writing a placeholder into LICENSE. MIT is
+    # exempt: it keeps the template body when no holder is given.
+    if lic.kind != "mit" and not lic.holder:
+        sys.exit(f"--license {lic.spdx!r} requires --license-holder: a {lic.kind} license notice needs a copyright holder.")
     opts = Options(
         description=args.description.strip(),
         author_name=(args.author_name or "").strip() or None,

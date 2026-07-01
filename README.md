@@ -30,15 +30,11 @@ Access to a **Pipelex API** server. You have two options:
 cp .env.example .env
 # edit .env and set PIPELEX_API_KEY (and PIPELEX_API_URL if self-hosting)
 
-make install   # create the venv and install deps with uv
-make run        # run the hello_world example against the API
+make install                       # create the venv and install deps with uv
+python -m my_project.hello_world   # run the hello_world example against the API
 ```
 
-`make run` prints the generated haiku. You can also run it directly:
-
-```bash
-python -m my_project.hello_world
-```
+That prints the generated haiku.
 
 ## Project structure
 
@@ -66,7 +62,7 @@ The `.mthds` bundle is sent to the API as content (`mthds_contents`), so nothing
 ## Useful commands
 
 ```bash
-make run          # run the hello_world example
+python -m my_project.hello_world  # run the hello_world example
 make validate     # lint/validate the .mthds bundle with plxt (offline)
 make agent-check  # fix-imports + format + lint + pyright + mypy
 make agent-test   # run the offline test suite (silent on success)

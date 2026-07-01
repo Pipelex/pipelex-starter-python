@@ -49,7 +49,6 @@ make export-requirements      - Export production requirements.txt (no dev depen
 make export-requirements-dev  - Export requirements-dev.txt (all dependencies including dev)
 make er                       - Shorthand -> export-requirements
 make erd                      - Shorthand -> export-requirements-dev
-make run                      - Run the hello_world example against the Pipelex API
 make validate                 - Lint/validate the .mthds bundle with plxt
 
 make format                   - Format all (ruff-format + plxt-format)
@@ -99,7 +98,7 @@ export HELP
 
 .PHONY: \
 	all help env env-verbose check-uv check-uv-verbose lock install update build \
-	export-requirements export-requirements-dev er erd run \
+	export-requirements export-requirements-dev er erd \
 	format lint ruff-format ruff-lint plxt-format plxt-lint pyright mypy \
 	cleanderived cleanenv cleanall \
 	test t test-quiet tq test-with-prints tp test-inference ti \
@@ -187,10 +186,6 @@ er: export-requirements
 
 erd: export-requirements-dev
 	@echo "> done: erd = export-requirements-dev"
-
-run: env
-	$(call PRINT_TITLE,"Running the hello_world example against the Pipelex API")
-	$(VENV_PYTHON) -m my_project.hello_world
 
 validate: env
 	$(call PRINT_TITLE,"Validating the .mthds bundle with plxt")
