@@ -41,6 +41,10 @@ Homepage = "https://pipelex.com"
 Repository = "https://github.com/yourusername/my-project" # Replace with your repository URL
 Documentation = "https://docs.pipelex.com/"
 
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [tool.uv]
 required-version = ">=0.7.2"
 
@@ -159,7 +163,7 @@ strictParameterNoneValue = true
 strictSetInference = true
 typeCheckingMode = "strict"
 
-[tool.pytest.ini_options]
+[tool.pytest]
 minversion = "9.0"
 addopts = [
   "--import-mode=importlib",

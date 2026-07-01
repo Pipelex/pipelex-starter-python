@@ -227,7 +227,7 @@ wheels = [
 [[package]]
 name = "my-project"
 version = "0.10.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "pipelex-sdk" },
     { name = "python-dotenv" },
