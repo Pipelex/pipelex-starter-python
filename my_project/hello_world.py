@@ -63,8 +63,12 @@ async def hello_world() -> None:
     if content is None:
         raise RuntimeError("The pipeline returned no output content.")
 
+    generated_text = content.get("text")
+    if not isinstance(generated_text, str) or not generated_text:
+        raise RuntimeError("The pipeline returned no text output.")
+
     print("Your first Pipelex output:\n")
-    print(content.get("text"))
+    print(generated_text)
 
 
 if __name__ == "__main__":
