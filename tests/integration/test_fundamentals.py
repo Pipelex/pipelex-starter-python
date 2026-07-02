@@ -1,7 +1,7 @@
 import pytest
 from pipelex_sdk.client import PipelexAPIClient
 
-from my_project.hello_world import BUNDLE_PATH
+from my_project.examples.extract_entities import BUNDLE_PATH
 
 
 class TestFundamentals:
