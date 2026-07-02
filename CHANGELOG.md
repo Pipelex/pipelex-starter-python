@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- **Breaking:** renamed the env var `PIPELEX_API_URL` to `PIPELEX_BASE_URL` for consistency with the SDK's `base_url` naming. There is no read alias — update your `.env` / environment.
+
 ## [v0.10.0] - 2026-07-01
 
 - **Breaking:** run methods through the hosted Pipelex API instead of the local `pipelex` runtime. The `pipelex` package (and its `[tool.uv.sources]` git pin) is dropped; the starter now depends on `pipelex-sdk` (`PipelexAPIClient`) and `python-dotenv`.

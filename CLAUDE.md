@@ -34,7 +34,7 @@ Run specific tests (local only): `make tp TEST=test_function_name`
 
 This starter calls the **hosted Pipelex API** via the `pipelex-sdk` package (`PipelexAPIClient`) — it does **not** run Pipelex as a local library. The `.mthds` bundle is read from disk and sent to the API as content (`mthds_contents`); the API runs the method and returns the output.
 
-- Credentials/endpoint come from `PIPELEX_API_URL` / `PIPELEX_API_KEY` (see `.env.example`). `python-dotenv` loads `.env` when running the CLI or tests.
+- Credentials/endpoint come from `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` (see `.env.example`). `python-dotenv` loads `.env` when running the CLI or tests.
 - `my_project/hello_world.py` uses `client.start_and_wait(...)` — the durable start-and-poll path (survives the hosted gateway's ~30s cap, self-heals to blocking `execute` on a bare runner).
 - Output is loosely-typed JSON: hosted runs carry `main_stuff`; the bare-runner fallback carries `pipe_output`. `find_main_content()` normalizes both.
 

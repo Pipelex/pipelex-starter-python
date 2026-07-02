@@ -46,15 +46,15 @@ def find_main_content(results: RunResults) -> dict[str, Any] | None:
 async def hello_world() -> None:
     """Run a super-simple Pipelex pipeline through the hosted Pipelex API and print its output.
 
-    The `PipelexAPIClient` reads `PIPELEX_API_URL` / `PIPELEX_API_KEY` from the
+    The `PipelexAPIClient` reads `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` from the
     environment. `start_and_wait` submits the run and polls it to completion — the
     durable path that survives the hosted gateway's ~30s synchronous cap, and
     self-heals to a blocking `execute` against a bare self-hosted runner.
     """
     bundle = BUNDLE_PATH.read_text()
 
-    async with PipelexAPIClient() as client:
-        results = await client.start_and_wait(
+    async with PipelexAPIClient() as pipelex_client:
+        results = await pipelex_client.start_and_wait(
             pipe_code="hello_world",
             mthds_contents=[bundle],
         )
@@ -72,6 +72,6 @@ async def hello_world() -> None:
 
 
 if __name__ == "__main__":
-    # Load .env so PIPELEX_API_URL / PIPELEX_API_KEY are available when run directly.
+    # Load .env so PIPELEX_BASE_URL / PIPELEX_API_KEY are available when run directly.
     load_dotenv()
     asyncio.run(hello_world())

@@ -17,7 +17,7 @@ classifiers = [
 ]
 
 dependencies = [
-  "pipelex-sdk==0.1.1",
+  "pipelex-sdk==0.2.0",
   "python-dotenv>=1.0.0",
 ]
 
