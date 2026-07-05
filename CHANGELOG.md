@@ -4,6 +4,7 @@
 
 ## [v0.11.0] - 2026-07-05
 
+- **Fixed:** the demo bundle's list fields (`people`/`orgs`/`dates`) now declare `item_type = "text"` so the output is typed as `list[str]`, matching the `ExtractedEntities` model. Without it the runtime built the fields as `List[Any]`.
 - **Read a run's output with `results.main_stuff`.** Bumped to `pipelex-sdk` 0.3.0, which resolves the main output for you on both execution modes: `execute` returns a `PipelexExecuteResult` and the durable path a `RunResults`, and both expose a resolved `.main_stuff`. The starter's whole output-extraction module (`my_project/run_output.py` — `find_main_content` shape-guessing + the `to_run_results` adapter) is gone; the CLI and the narrower read `results.main_stuff` directly, and the blocking `execute` result is adapted onto `RunResults` inline in the runner. A completed run that delivers no main stuff raises the SDK's `MissingMainStuffError` instead of yielding `None`.
 - **Breaking:** renamed the env var `PIPELEX_API_URL` to `PIPELEX_BASE_URL` for consistency with the SDK's `base_url` naming. There is no read alias — update your `.env` / environment.
 - **Fixed:** rewrote the README and `CLAUDE.md` around the actual `my-project` CLI (the `extract-entities` command, the durable/blocking execution modes, and the `runs status|result|wait` lifecycle). They still described the removed `hello_world` module, `start_and_wait` usage, and the `find_main_content` normalizer, so the quick start's first command errored out for a fresh user.
