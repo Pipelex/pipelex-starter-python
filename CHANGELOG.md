@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [v0.11.0] - 2026-07-05
+
+- **Read a run's output with `results.main_stuff`.** Bumped to `pipelex-sdk` 0.3.0, which resolves the main output for you on both execution modes: `execute` returns a `PipelexExecuteResult` and the durable path a `RunResults`, and both expose a resolved `.main_stuff`. The starter's own output-extraction helper (`find_main_content`, which shape-guessed the working memory on the blocking path) is gone — `to_run_results` is now a trivial adapter, and the CLI / narrower read `results.main_stuff` directly. A completed run that delivers no main stuff raises the SDK's `MissingMainStuffError` instead of yielding `None`.
 - **Breaking:** renamed the env var `PIPELEX_API_URL` to `PIPELEX_BASE_URL` for consistency with the SDK's `base_url` naming. There is no read alias — update your `.env` / environment.
 
 ## [v0.10.0] - 2026-07-01

@@ -19,7 +19,6 @@ from rich.console import Console
 
 from my_project.errors import present_error
 from my_project.examples import extract_entities as extract_entities_example
-from my_project.run_output import find_main_content
 from my_project.runner import (
     ExecutionMode,
     fetch_run_result,
@@ -161,10 +160,7 @@ def _render_result_state(state: RunResultState) -> None:
 
 def _print_raw_results(results: RunResults) -> None:
     """Print the run's main content as JSON — generic, no per-example narrowing."""
-    content: Any = find_main_content(results)
-    if content is None:
-        content = results.main_stuff if results.main_stuff is not None else results.pipe_output
-    output_console.print_json(data=content)
+    output_console.print_json(data=results.main_stuff)
 
 
 if __name__ == "__main__":
