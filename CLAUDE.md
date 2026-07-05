@@ -34,17 +34,17 @@ Run specific tests (local only): `make tp TEST=test_function_name`
 
 This starter calls the **hosted Pipelex API** via the `pipelex-sdk` package (`PipelexAPIClient`) — it does **not** run Pipelex as a local library. The `.mthds` bundle is read from disk and sent to the API as content (`mthds_contents`); the API runs the method and returns the output.
 
-- Credentials/endpoint come from `PIPELEX_API_URL` / `PIPELEX_API_KEY` (see `.env.example`). `python-dotenv` loads `.env` when running the CLI or tests.
-- `my_project/hello_world.py` uses `client.start_and_wait(...)` — the durable start-and-poll path (survives the hosted gateway's ~30s cap, self-heals to blocking `execute` on a bare runner).
-- Output is loosely-typed JSON: hosted runs carry `main_stuff`; the bare-runner fallback carries `pipe_output`. `find_main_content()` normalizes both.
+- Credentials/endpoint come from `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` (see `.env.example`). `python-dotenv` loads `.env` when running the CLI or tests.
+- The `my-project` CLI (`my_project/cli.py`) is a Typer app; `my_project/runner.py` dispatches each run by execution mode — `blocking` (`client.execute`), durable attended (`client.start` + `client.wait_for_result`), and durable detached (`client.start` only, resumed via `my-project runs status|result|wait <id>`). It branches on mode explicitly rather than using the SDK's `start_and_wait` self-healing one-liner, because teaching the mode difference is the point.
+- The SDK resolves the main output on both modes: `client.execute` returns a `PipelexExecuteResult` and the durable path a `RunResults`, both exposing a resolved `.main_stuff` (a completed run with no main stuff raises `MissingMainStuffError`). Per-example narrowing lives in `my_project/examples/` — `extract_entities.parse()` validates `results.main_stuff` into a typed `ExtractedEntities` model. SDK errors are mapped to CLI-facing messages + hints in `my_project/errors.py`.
 
 ## Project Structure
 
 - Package: `my_project/` (Python 3.10+, target 3.11)
-- Tests: `tests/` (integration = offline boot/bundle checks + API `validate`; e2e = full run via the API)
+- Tests: `tests/` (unit = offline CLI/example/error-mapping tests; integration = offline boot/bundle checks + API `validate`; e2e = full run via the API)
 - Dependency manager: uv (>=0.7.2)
 - Pipelex dependency: `pipelex-sdk` package from PyPI (the API client — see pyproject.toml). The `pipelex` runtime is **not** a dependency.
-- `.mthds` files: Pipelex method definition files in `my_project/`
+- `.mthds` files: Pipelex method definition files in `my_project/methods/<name>/main.mthds`
 
 ## Test markers
 

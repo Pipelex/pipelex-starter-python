@@ -1,15 +1,15 @@
 import pytest
 from pipelex_sdk.client import PipelexAPIClient
 
-from my_project.hello_world import BUNDLE_PATH
+from my_project.examples.extract_entities import BUNDLE_PATH
 
 
 class TestFundamentals:
     def test_boot(self):
         # Constructing the client resolves credentials + base URL (no network).
-        # This fails if PIPELEX_API_URL is malformed.
+        # This fails if PIPELEX_BASE_URL is malformed.
         client = PipelexAPIClient()
-        assert client.api_base_url
+        assert client.base_url
 
     def test_bundle_exists(self):
         assert BUNDLE_PATH.exists()
