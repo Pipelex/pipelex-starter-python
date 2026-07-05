@@ -21,8 +21,6 @@ from pipelex_sdk.client import PipelexAPIClient
 from pipelex_sdk.runs import PollInfo, RunRead, RunResults, RunResultState, WaitForResultOptions
 from rich.console import Console
 
-from my_project.run_output import to_run_results
-
 # Progress and lifecycle chatter go to stderr so stdout stays pipeable.
 progress_console = Console(stderr=True)
 
@@ -43,7 +41,10 @@ async def run_blocking(*, pipe_code: str, bundle: str, inputs: dict[str, Any] | 
     async with PipelexAPIClient() as client:
         with progress_console.status("Running (blocking)…"):
             result = await client.execute(pipe_code=pipe_code, mthds_contents=[bundle], inputs=inputs)
-    return to_run_results(result)
+    # Adapt the blocking `execute` result onto `RunResults` so both modes return one type;
+    # `.main_stuff` is already resolved by the SDK (it raises `MissingMainStuffError` if a
+    # completed run named no main stuff).
+    return RunResults(pipeline_run_id=result.pipeline_run_id, main_stuff=result.main_stuff)
 
 
 async def run_durable_attended(*, pipe_code: str, bundle: str, inputs: dict[str, Any] | None = None) -> RunResults:
