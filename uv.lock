@@ -281,7 +281,7 @@ dev = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11.2" },
-    { name = "pipelex-sdk", git = "ssh://git@github.com/Pipelex/pipelex-sdk-python.git?rev=release%2Fv0.3.0" },
+    { name = "pipelex-sdk", specifier = ">=0.3.0" },
     { name = "pipelex-tools", marker = "extra == 'dev'", specifier = ">=0.3.2" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.410" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.1" },
@@ -379,13 +379,17 @@ wheels = [
 [[package]]
 name = "pipelex-sdk"
 version = "0.3.0"
-source = { git = "ssh://git@github.com/Pipelex/pipelex-sdk-python.git?rev=release%2Fv0.3.0#458dcc79c56b146493d9d1c8822317583df0a6d3" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "backports-strenum", marker = "python_full_version < '3.11'" },
     { name = "httpx" },
     { name = "mthds" },
     { name = "pydantic" },
     { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d8/22/56770109ac02047147830aef78972550aa2939132f964879cd29def56965/pipelex_sdk-0.3.0.tar.gz", hash = "sha256:02f9deb692125fc5843d50cb9b6f698c331e5335868ad0b4f1e4eb915933ce75", size = 120328, upload-time = "2026-07-05T14:28:35.853Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9d/01/bb84efcb45df99ff0a27e582e51dcface11de1c641fa1be524151aec8d00/pipelex_sdk-0.3.0-py3-none-any.whl", hash = "sha256:a8af6b8298b6f509fec1dca41830c121e2605c6e55cc6c6ba5d2cdc546e99c7d", size = 33602, upload-time = "2026-07-05T14:28:34.524Z" },
 ]
 
 [[package]]
