@@ -379,7 +379,7 @@ wheels = [
 [[package]]
 name = "pipelex-sdk"
 version = "0.3.0"
-source = { git = "ssh://git@github.com/Pipelex/pipelex-sdk-python.git?rev=release%2Fv0.3.0#68e2b8efe03b3110bf72bd62b8d44e6a588bc229" }
+source = { git = "ssh://git@github.com/Pipelex/pipelex-sdk-python.git?rev=release%2Fv0.3.0#458dcc79c56b146493d9d1c8822317583df0a6d3" }
 dependencies = [
     { name = "backports-strenum", marker = "python_full_version < '3.11'" },
     { name = "httpx" },
