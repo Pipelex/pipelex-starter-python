@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [v0.12.0] - 2026-07-06
+
+- **Breaking:** dropped Python 3.10 support. `pipelex-sdk` 0.4.0 no longer supports 3.10, so the starter now requires Python 3.11+ (`requires-python = ">=3.11,<3.15"`). Removed the `Python :: 3.10` classifier and dropped 3.10 from the CI lint/test matrices.
+- Bumped `pipelex-sdk` to 0.4.0 (pulls in `mthds` 0.8.1). Re-locked `uv.lock` and refreshed the dev-tooling pins (ruff, mypy, pyright, pytest).
 
 ## [v0.11.0] - 2026-07-05
 
