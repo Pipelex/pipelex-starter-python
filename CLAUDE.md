@@ -40,7 +40,7 @@ This starter calls the **hosted Pipelex API** via the `pipelex-sdk` package (`Pi
 
 ## Project Structure
 
-- Package: `my_project/` (Python 3.10+, target 3.11)
+- Package: `my_project/` (Python 3.11+, target 3.11)
 - Tests: `tests/` (unit = offline CLI/example/error-mapping tests; integration = offline boot/bundle checks + API `validate`; e2e = full run via the API)
 - Dependency manager: uv (>=0.7.2)
 - Pipelex dependency: `pipelex-sdk` package from PyPI (the API client — see pyproject.toml). The `pipelex` runtime is **not** a dependency.
