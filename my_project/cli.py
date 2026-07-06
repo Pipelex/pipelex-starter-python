@@ -19,6 +19,9 @@ from rich.console import Console
 
 from my_project.errors import present_error
 from my_project.examples import extract_entities as extract_entities_example
+from my_project.examples import generate_image as generate_image_example
+from my_project.examples import summarize_pdf as summarize_pdf_example
+from my_project.file_input import build_document_input
 from my_project.runner import (
     ExecutionMode,
     fetch_run_result,
@@ -72,6 +75,58 @@ def extract_entities(
     # as JSON — the same rendering `runs result` / `runs wait` give.
     entities = extract_entities_example.parse(results)
     output_console.print_json(data=entities.model_dump())
+
+
+@app.command(name="summarize-pdf")
+def summarize_pdf(
+    file: Annotated[Path, typer.Argument(help="Path to the PDF (or other document) to summarize.")],
+    mode: Annotated[ExecutionMode, typer.Option(envvar="PIPELEX_EXECUTION_MODE", help=MODE_HELP)] = ExecutionMode.DURABLE,
+    detach: Annotated[bool, typer.Option("--detach", help=DETACH_HELP)] = False,
+) -> None:
+    """Summarize a document into a title, type, and key points."""
+    if not file.is_file():
+        msg = f"No such file: {file}"
+        raise typer.BadParameter(msg)
+    bundle = summarize_pdf_example.BUNDLE_PATH.read_text()
+    results = _dispatch(
+        pipe_code=summarize_pdf_example.PIPE_CODE,
+        bundle=bundle,
+        inputs={"document": build_document_input(file)},
+        mode=mode,
+        detach=detach,
+    )
+    if results is None:
+        return
+    summary = summarize_pdf_example.parse(results)
+    output_console.print_json(data=summary.model_dump())
+
+
+@app.command(name="generate-image")
+def generate_image(
+    prompt: Annotated[str | None, typer.Argument(help="The text prompt describing the image to generate.")] = None,
+    file: Annotated[Path | None, typer.Option("--file", help="Read the prompt from a file instead of the argument.")] = None,
+    mode: Annotated[ExecutionMode, typer.Option(envvar="PIPELEX_EXECUTION_MODE", help=MODE_HELP)] = ExecutionMode.DURABLE,
+    detach: Annotated[bool, typer.Option("--detach", help=DETACH_HELP)] = False,
+) -> None:
+    """Generate an image from a text prompt.
+
+    Image generation routinely outlives the hosted ~30s blocking cap, so this is
+    the example to run with `--mode blocking` to see a timeout — then `--mode
+    durable` (the default) to actually get an image.
+    """
+    image_prompt = _read_text_input(text=prompt, file=file)
+    bundle = generate_image_example.BUNDLE_PATH.read_text()
+    results = _dispatch(
+        pipe_code=generate_image_example.PIPE_CODE,
+        bundle=bundle,
+        inputs={"image_prompt": image_prompt},
+        mode=mode,
+        detach=detach,
+    )
+    if results is None:
+        return
+    image = generate_image_example.parse(results)
+    output_console.print_json(data=image.model_dump())
 
 
 @runs_app.command(name="status")

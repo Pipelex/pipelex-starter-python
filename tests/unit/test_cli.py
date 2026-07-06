@@ -7,6 +7,8 @@ from typer.testing import CliRunner
 from my_project.cli import app
 
 ENTITIES_CONTENT = {"people": ["Marie Curie"], "orgs": ["University of Paris"], "dates": ["1906"]}
+SUMMARY_CONTENT = {"title": "Q3 Report", "doc_type": "report", "key_points": ["Revenue up 12%"]}
+IMAGE_CONTENT = {"url": "https://example.com/cat.png", "public_url": "https://cdn.example.com/cat.png"}
 
 runner = CliRunner()
 
@@ -15,8 +17,8 @@ class TestCli:
     def test_help_lists_commands(self):
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "extract-entities" in result.output
-        assert "runs" in result.output
+        for command in ("extract-entities", "summarize-pdf", "generate-image", "runs"):
+            assert command in result.output
 
     def test_runs_help_lists_subcommands(self):
         result = runner.invoke(app, ["runs", "--help"])
@@ -73,3 +75,40 @@ class TestCli:
         result = runner.invoke(app, ["extract-entities", "some text", "--detach"])
         assert result.exit_code == 0
         assert "run-abc123" in result.output
+
+    def test_summarize_pdf_requires_file(self):
+        result = runner.invoke(app, ["summarize-pdf"])
+        assert result.exit_code != 0
+
+    def test_summarize_pdf_rejects_missing_file(self, tmp_path: Path):
+        result = runner.invoke(app, ["summarize-pdf", str(tmp_path / "nope.pdf")])
+        assert result.exit_code != 0
+
+    def test_summarize_pdf_sends_document_input(self, mocker: MockerFixture, tmp_path: Path):
+        durable_mock = mocker.patch(
+            "my_project.cli.run_durable_attended", return_value=RunResults(pipeline_run_id="run-pdf", main_stuff=SUMMARY_CONTENT)
+        )
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        result = runner.invoke(app, ["summarize-pdf", str(pdf)])
+        assert result.exit_code == 0
+        assert "Q3 Report" in result.output
+        assert durable_mock.await_args is not None
+        document_input = durable_mock.await_args.kwargs["inputs"]["document"]
+        assert document_input["concept"] == "Document"
+        assert document_input["content"]["mime_type"] == "application/pdf"
+        assert document_input["content"]["url"].startswith("data:application/pdf;base64,")
+
+    def test_generate_image_requires_input(self):
+        result = runner.invoke(app, ["generate-image"])
+        assert result.exit_code != 0
+
+    def test_generate_image_sends_prompt(self, mocker: MockerFixture):
+        durable_mock = mocker.patch(
+            "my_project.cli.run_durable_attended", return_value=RunResults(pipeline_run_id="run-img", main_stuff=IMAGE_CONTENT)
+        )
+        result = runner.invoke(app, ["generate-image", "a cat wearing a hat"])
+        assert result.exit_code == 0
+        assert "example.com/cat.png" in result.output
+        assert durable_mock.await_args is not None
+        assert durable_mock.await_args.kwargs["inputs"] == {"image_prompt": "a cat wearing a hat"}

@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- **Added two demo methods so the starter now ships three, matching the JS starter.** `summarize-pdf` summarizes a document (PDF) into `{ title, doc_type, key_points }` and demonstrates a *file* input — `my_project/file_input.build_document_input()` encodes a local file as a base64 `data:` URL wrapped in a `Document` envelope. `generate-image` generates an image from a text prompt and is the slow case that overruns the hosted ~30s blocking cap, making the durable-vs-blocking split concrete. Each is a self-contained "copy me" module under `my_project/examples/` with a matching `main.mthds` bundle and its own unit + e2e tests. Ships `samples/sample-invoice.pdf` to try `summarize-pdf` on.
+
 ## [v0.12.0] - 2026-07-06
 
 - **Breaking:** dropped Python 3.10 support. `pipelex-sdk` 0.4.0 no longer supports 3.10, so the starter now requires Python 3.11+ (`requires-python = ">=3.11,<3.15"`). Removed the `Python :: 3.10` classifier and dropped 3.10 from the CI lint/test matrices.

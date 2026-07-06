@@ -4,7 +4,13 @@
 
 A minimal Python CLI starter that calls the [Pipelex](https://pipelex.com) API via the [`pipelex-sdk`](https://pypi.org/project/pipelex-sdk/) SDK to run AI methods (`.mthds` bundles) — no local Pipelex runtime required.
 
-It ships one demo method, `extract-entities` (`my_project/methods/extract-entities/main.mthds`), exposed through a `my-project` CLI. Given a piece of text it asks an LLM to pull out the people, organizations, and dates it mentions, and prints them as JSON.
+It ships three demo methods, each exposed as a `my-project` CLI command:
+
+- **`extract-entities`** — given a piece of text, pull out the people, organizations, and dates it mentions.
+- **`summarize-pdf`** — given a document (PDF), produce a title, document type, and key points. Shows how to feed a *file* to a pipe.
+- **`generate-image`** — given a text prompt, generate an image. Being slow, it's the example that best shows the durable-vs-blocking split (image generation routinely outlives the hosted ~30s blocking cap).
+
+Each prints its result as JSON.
 
 ### Use this template
 
@@ -43,10 +49,17 @@ my_project/
   cli.py                         # the `my-project` Typer CLI (console-script entry point)
   runner.py                      # execution-mode dispatch: blocking / durable attended / detached
   errors.py                      # maps SDK errors to CLI messages + hints
-  examples/
-    extract_entities.py          # the "copy me" unit: bundle path, output model, parse() narrower
-  methods/
-    extract-entities/main.mthds  # the method bundle: text → { people, orgs, dates }
+  file_input.py                  # encode a local file into a Pipelex Document input envelope
+  examples/                      # one "copy me" unit per demo: bundle path, output model, parse()
+    extract_entities.py          #   text → { people, orgs, dates }
+    summarize_pdf.py             #   document → { title, doc_type, key_points }
+    generate_image.py            #   prompt → image
+  methods/                       # the method bundles (sent to the API as content)
+    extract-entities/main.mthds
+    summarize-pdf/main.mthds
+    generate-image/main.mthds
+samples/
+  sample-invoice.pdf             # a document to try `summarize-pdf` on
 tests/
   unit/                          # offline CLI / example / error-mapping tests
   integration/                   # offline boot/bundle checks + API validate (pipelex_api)
@@ -68,15 +81,22 @@ The `.mthds` bundle is sent to the API as content (`mthds_contents`), so nothing
 
 `my_project/runner.py` deliberately branches on the mode explicitly rather than calling the SDK's `start_and_wait()` self-healing one-liner (the production shortcut when you don't care which mode) — teaching the difference between the two paths is the point of this starter. Pass `--detach` (durable only) to start a run and return immediately, then pick it back up later with `my-project runs status|result|wait <id>`.
 
+The other two examples run through the exact same dispatch and lifecycle — they only differ in their input and output shapes:
+
+- **`summarize-pdf <file>`** takes a *file* input. `file_input.build_document_input()` reads the file, base64-encodes it into a `data:` URL, and wraps it in a `{ "concept": "Document", "content": … }` envelope; the API decodes and stores it server-side, so you never host the file yourself.
+- **`generate-image "<prompt>"`** is slow enough to routinely exceed the hosted ~30s blocking cap. Run it with `--mode blocking` to watch it hit the wall (a classified `PipelineExecuteTimeoutError` with a hint), then with `--mode durable` (the default) to actually get an image back.
+
 ## Useful commands
 
 ```bash
-uv run my-project extract-entities "Alice from Acme met Bob on May 3rd, 2026."  # run the demo method
+uv run my-project extract-entities "Alice from Acme met Bob on May 3rd, 2026."  # text → entities
 uv run my-project extract-entities --file notes.txt          # read the input text from a file
-uv run my-project extract-entities "…" --mode blocking       # single synchronous call (~30s cap on hosted)
+uv run my-project summarize-pdf samples/sample-invoice.pdf   # document → { title, doc_type, key_points }
+uv run my-project generate-image "a fox reading under a tree"  # prompt → image (use durable, the default)
+uv run my-project generate-image "…" --mode blocking         # watch it hit the ~30s cap with a timeout hint
 uv run my-project extract-entities "…" --detach              # start a durable run, print its id, return
 uv run my-project runs wait <run-id>                         # resume a detached run to completion (also: runs status / runs result)
-make validate     # lint/validate the .mthds bundle with plxt (offline)
+make validate     # lint/validate the .mthds bundles with plxt (offline)
 make agent-check  # fix-imports + format + lint + pyright + mypy
 make agent-test   # run the offline test suite (silent on success)
 make test-inference  # run the tests that hit the API (needs a key)
