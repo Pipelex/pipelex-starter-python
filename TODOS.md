@@ -4,12 +4,13 @@ Implementation plan spanning five phases. Written 2026-07-07 after a taste discu
 
 > ## ▶ START HERE (cold start) — updated 2026-07-07
 >
-> **Phases 1–2 are DONE and committed.** Resume at **Phase 3 (README DevX)**.
+> **Phases 1–4 are DONE and COMMITTED.** Resume at **Phase 5 (verify → changelog → PR)** — the only remaining phase.
 >
-> - Branch `feature/Parity-to-JS`, **tree clean**, 3 commits ahead of `main`: `1a08426` (pre-existing examples) · `97a28b2` (the `git mv` renames) · `6d5adbf` (content edits + bootstrap rework).
-> - Read the **CHECKPOINT 1 — STATUS** block (just below Phase 2) first — it carries the decisions, the one plan deviation, and the exact code state. The template placeholder is now the single token `piper`/`Piper`; the CLI answers to `uv run piper …`.
-> - **Still open (pick up at session start):** Q1 (confirm Mermaid) before Phase 4, Q3 (API key for real README outputs) for Phase 3, Q4 (changelog history) for Phase 5 — see **Open questions**. Q2 (branch strategy) is resolved.
-> - **One loose end outside this repo:** the `../docs/workspace-overview.md` fix is committed *nowhere yet* — it sits **uncommitted in the workspace-parent repo** (`/Users/lchoquel/repos/Pipelex`). Commit it there separately or drop it.
+> - Branch `feature/Parity-to-JS`, **tree clean**, **6 commits ahead of `main`** (after this doc commit): `1a08426` (pre-existing examples) · `97a28b2` (the `git mv` renames) · `6d5adbf` (content edits + bootstrap rework) · `dddc223` (docs(todos): Checkpoint-1 record) · `defe0ec` (**Phase 3–4: README DevX + Mermaid diagrams**) · this `docs(todos)` Checkpoint-2 commit. **No PR opened yet.**
+> - Read the **CHECKPOINT 2 — STATUS** block (just below Phase 4) first — it carries what the diagrams show, the final command list, and the exact code state. Then **CHECKPOINT 1 — STATUS** for the rename/bootstrap decisions. The template placeholder is the single token `piper`/`Piper`; the CLI answers to `uv run piper …`.
+> - **Still open for Phase 5:** Q4 (changelog history) — see **Open questions**. Q1 (Mermaid ✓), Q2 (branch ✓), Q3 (API key ✓ — real outputs captured) are resolved.
+> - **Phase 5's job (all that's left):** write the `CHANGELOG.md` entry (resolve Q4), run `make v` + `make tb` (not yet run this session — `make agent-check`/`make agent-test` already green at `defe0ec`), optionally one real `uv run piper extract-entities …` end-to-end (a working `PIPELEX_API_KEY` is in `.env`), then commit the changelog and open the PR to `main`. The plan's commit split "(2) README DevX + diagrams" is **already done** (`defe0ec`); only the changelog commit remains.
+> - **Two carried-over notes:** (a) sibling `pipelex-starter-js` could get the same two diagrams for parity — record as a future task in that repo. (b) the `../docs/workspace-overview.md` fix is committed *nowhere yet* — it sits **uncommitted in the workspace-parent repo** (`/Users/lchoquel/repos/Pipelex`). Commit it there separately or drop it.
 >
 > Everything from here down is the original plan. The "Context"/"Decisions" sections are the rationale (past tense now); the per-phase checklists show what's ticked.
 
@@ -29,9 +30,9 @@ This repo is a GitHub **template** (`pipelex-starter-python`): a Python CLI star
 
 - The bootstrap script used to handle a `TestMyProject` class (`TEMPLATE_CAMEL`) and rename `tests/e2e/test_my_project.py`, but no such class existed anymore. **Fixed:** the file is now `tests/e2e/test_extract_entities.py` (matching its siblings `test_summarize_pdf.py` / `test_generate_image.py`), and the camel/test-class machinery is deleted from bootstrap. Bootstrap now has three name forms: dist (dashes), package (underscores), title.
 
-### Current git state — updated 2026-07-07
+### Current git state — updated 2026-07-07 (Checkpoint 2)
 
-- Branch `feature/Parity-to-JS`, **tree clean**, 3 commits ahead of `main`: `1a08426` (pre-existing "Complete the set pf examples" — note the typo, it's in history) · `97a28b2` (renames) · `6d5adbf` (content edits + bootstrap rework). Branch strategy resolved (stacked; see CHECKPOINT 1 — STATUS). No PR opened yet.
+- Branch `feature/Parity-to-JS`, **tree clean**, **6 commits ahead of `main`** (see the START HERE block for the full list). The rename/bootstrap work is `97a28b2` + `6d5adbf`; Phase 3–4 (README DevX + Mermaid diagrams) is `defe0ec`; the two `docs(todos)` commits (`dddc223`, and this Checkpoint-2 one) record the plan progress. `1a08426` is the pre-existing "Complete the set pf examples" (note the typo, it's in history). Branch strategy resolved (stacked; see CHECKPOINT 1 — STATUS). **No PR opened yet.**
 
 ---
 
@@ -96,25 +97,57 @@ Goal: bootstrap still turns the template into a user's project in one determinis
 
 Goal: a newcomer skims the README and immediately sees commands that look like a real product and knows what success looks like. Structure and coupling notes:
 
-- [ ] Move the `uv run` explainer **before** the first command, reworded around the npx analogy: "`uv run` runs a command inside this project's environment — think `npx` for Python." Keep the activate-the-venv alternative as the secondary note after it.
-- [ ] Quick start: after the first command, show **expected output** — a short, real, trimmed JSON of the extracted entities so the user can recognize success. Capture from an actual run (needs `PIPELEX_API_KEY`; see Open questions). If no key is available in-session, use output copied from a previous real run and verify the shape against `piper/examples/extract_entities.py`'s model.
-- [ ] Restructure "Useful commands" into a "Try the three demos" section: one mini-block per demo — the command, a trimmed expected output (or, for `generate-image`, what gets saved/printed), and a one-line teaching point (`generate-image` is the demo that motivates durable mode; `--mode blocking` shows the ~30s cap). Keep a compact `make` targets block at the end.
-- [ ] "Next steps after creating from template" currently describes the manual rename only — make the `/bootstrap` skill the primary path ("open the repo in Claude Code and run `/bootstrap`") with the manual steps as fallback. Keep wording consistent with what `strip_template_block()` expects to find (Phase 2 coupling).
-- [ ] Reread the whole README top to bottom for flow once the pieces are in; the tone bar: commands should read like a real product's docs, not a template's.
-- [ ] Style rules that apply (workspace `CLAUDE.md`): no hard-wrapped lines (one paragraph = one line), no hardcoded counts.
+- [x] Move the `uv run` explainer **before** the first command, reworded around the npx analogy: "`uv run` executes a command inside this project's environment — think `npx` for Python, so there's no virtualenv to activate first." The activate-the-venv alternative is the secondary note after the output block.
+- [x] Quick start: after the first command, show **expected output** — real trimmed JSON of the extracted entities. **Captured from an actual run** (Q3 resolved: a working `PIPELEX_API_KEY` is in `.env`). Also added a one-liner explaining the `Run started: run_…` stderr line (durable prints the id first).
+- [x] Restructured "Useful commands" into a **"Try the demos"** section: one mini-block per demo — command, trimmed real output, one-line teaching point. `generate-image` block motivates durable mode and the `--mode blocking` ~30s cap. Kept a compact `make`-targets + `--detach`/`runs wait` block at the end under "Useful commands". **Note:** titled "Try the demos" (not "…three demos") and intro says "a handful of demo methods" — dropped the numeral to honor the no-hardcoded-counts rule; the bullet list shows the count.
+- [x] "Use this template" now leads with the `/bootstrap` skill as the primary path ("open your new repo in Claude Code and run `/bootstrap`") with the manual steps as fallback. The manual steps were also corrected to name `[project.scripts]` + `[tool.setuptools] packages` (the old list missed them). Kept the `### Use this template` heading + `*Replace "…` line exactly (Phase 2 anchors) — verified the block still strips cleanly (see CHECKPOINT 2 status).
+- [x] Reread top-to-bottom; reflowed section order to Quick start → Try the demos → How it works → Execution modes → Project structure → Useful commands. Split the old "How it works" into two H2s so each diagram has a home.
+- [x] Style: one-paragraph-per-line (no hard wraps), no hardcoded counts.
 
 ## Phase 4 — Mermaid illustrations
 
 Goal: two compact diagrams that carry the starter's two big ideas. GitHub renders Mermaid in fenced ```mermaid blocks natively (both themes). Keep them small — no sprawling boxes.
 
-- [ ] **Diagram 1 — how a run works** (flowchart, in "How it works"): CLI command → reads `.mthds` bundle from disk → `PipelexAPIClient` → hosted Pipelex API runs the method → `results.main_stuff` → example's `parse()` → typed model → JSON to stdout. Emphasize that the bundle is sent as *content* (nothing method-specific lives server-side).
-- [ ] **Diagram 2 — execution modes** (sequence diagram, next to the durable/blocking explanation): three lifelines-worth of comparison — **blocking** (`execute`, cut off past the hosted ~30s cap), **durable attended** (`start` → poll `wait_for_result`, survives the cap, run id printed first), **durable detached** (`start` → exit; later `piper runs status|result|wait <id>`). This is the starter's core teaching point; the diagram should make the ~30s cap visually obvious.
-- [ ] Sanity-check rendering on GitHub (push the branch, view the README) — Mermaid syntax errors render as an error block, not silently.
-- [ ] Follow-up to note, not to do here: `pipelex-starter-js` (sibling repo) could get the same two diagrams for parity — record as a future task in that repo.
+- [x] **Diagram 1 — how a run works** (flowchart TD, in "How it works"): `piper extract-entities '…'` → read the `.mthds` bundle from disk → `PipelexAPIClient` (env creds) → **edge label "bundle sent as content (mthds_contents)"** → hosted Pipelex API runs the method → `results.main_stuff` → example `parse()` → typed model → JSON on stdout. The content-not-code point rides on the API edge.
+- [x] **Diagram 2 — execution modes** (sequence diagram, in a new "Execution modes: durable vs blocking" H2): two lifelines (You / Hosted API) with three `Note over`-labeled regions — **blocking** (`execute`, then a `--x` lost-message "past ~30s → timeout, switch to durable" that makes the cap visually obvious), **durable attended** (`start` → run id printed first → `loop` poll `wait_for_result` → result), **durable detached** (`start` → run id + exit → later `piper runs wait <id>` → result).
+- [x] Rendering sanity-check: **validated locally with `mmdc`** (mermaid-cli — same mermaid.js engine GitHub uses); both diagrams render to SVG/PNG cleanly and were visually eyeballed (layout + renamed-command correct). The literal GitHub push-view is deferred to the Phase 5 commit/push (nothing to fix — this is belt-and-suspenders).
+- [ ] Follow-up (do NOT do here): `pipelex-starter-js` (sibling repo) could get the same two diagrams for parity — record as a future task in that repo. *(Still to record; carry into Phase 5 wrap-up or a separate note.)*
 
 ---
 
 **CHECKPOINT 2** — README reads well end-to-end with diagrams. Update this file: tick boxes, note what the diagrams ended up showing, paste the final example-command list into the notes below for the record.
+
+### CHECKPOINT 2 — STATUS (reached 2026-07-07)
+
+**Done:** Phases 3 and 4 complete and verified. Ready for Phase 5.
+
+**Open-question resolutions taken this session:**
+- **Q1 (Mermaid) → confirmed.** Two fenced ` ```mermaid ` blocks, validated locally with `mmdc`.
+- **Q3 (API key) → resolved: real outputs captured.** A working `PIPELEX_API_KEY` is present in `.env`. Ran `extract-entities` and `summarize-pdf` against the hosted API for the README's expected-output JSON. Did **not** run `generate-image` (slow/costly) — its block shows the `Image` content shape (`url` / `public_url` / `mime_type` / `caption`) with `…` placeholders, verified against `piper/examples/generate_image.py`'s `GeneratedImage` model.
+- **Q4 (changelog history)** stays open for Phase 5.
+
+**What the two diagrams show (for the record):**
+- **Diagram 1 (flowchart TD, "How it works"):** `piper extract-entities '…'` → read `.mthds` bundle from disk → `PipelexAPIClient (env creds)` → *[edge: bundle sent as content (mthds_contents)]* → hosted Pipelex API runs the method → `results.main_stuff` → example `parse()` → typed model → JSON on stdout. The "content, not code, lives server-side" point rides the API edge label.
+- **Diagram 2 (sequenceDiagram, "Execution modes: durable vs blocking"):** lifelines `You (piper CLI)` / `Hosted Pipelex API`, three `Note over`-labeled regions — **blocking** (`execute` → result-if-under-~30s, then a `--x` lost-message "past ~30s → timeout, switch to durable"), **durable attended** (`start` → run id printed first, `loop` poll `wait_for_result` → result), **durable detached** (`start` → run id + exit → later `piper runs wait <id>` → result). The `--x` cross in the blocking region makes the ~30s cap visually obvious.
+
+**Final example-command list in the README (post-Phase-3/4):**
+```
+uv run piper extract-entities "Alice from Acme met Bob on May 3rd, 2026."
+uv run piper extract-entities --file notes.txt
+uv run piper summarize-pdf samples/sample-invoice.pdf
+uv run piper generate-image "a fox reading under a tree"                    # durable (default)
+uv run piper generate-image "a fox reading under a tree" --mode blocking    # hits the ~30s cap
+uv run piper extract-entities "…" --detach
+uv run piper runs wait <run-id>                                             # also: runs status | runs result
+```
+
+**Current state of the code:**
+- Branch `feature/Parity-to-JS`, **6 commits ahead of `main`, tree clean.** Phase 3–4 (README DevX + Mermaid diagrams) was committed this session as **`defe0ec`** — the plan's suggested commit split "(2)". This `TODOS.md` update is the accompanying `docs(todos)` Checkpoint-2 commit (mirrors `dddc223` for Checkpoint 1).
+- `make agent-check` + `make agent-test` were green at `defe0ec` (README-only diff). `make v` (offline bundle validate) and `make tb` (boot test) were **not** run this session — they're the first Phase 5 items.
+- **Phase 2 coupling re-verified against the reworded README:** ran the bootstrap transform in-process with a two-word name (`invoice_extractor` / `invoice-extractor`) — `strip_template_block()` cleanly removes the `*Replace "…` line and the whole `### Use this template` block (intro flows straight into `## Prerequisites`, no dangling blanks), both diagrams' `piper` tokens rename to the dist form, and the post-run survivor assertion passes with **zero** leftover `[Pp]iper` tokens. A `--clean --dry-run` of the real `bootstrap.py` also exits 0.
+- Scratch render artifacts (`d1.png` / `d2.png` / SVGs) lived in the previous session's scratchpad — gone in a fresh session; regenerate with `mmdc -i <file>.mmd -o out.png` from the two fenced ` ```mermaid ` blocks in `README.md` if you want to re-eyeball.
+
+**For Phase 5 (next):** the README DevX + diagrams are **already committed** (`defe0ec`); Phase 5 is now just verify → changelog → PR. Write the `CHANGELOG.md` entry (resolve Q4), run `make v` + `make tb`, optionally one real `uv run piper extract-entities …` end-to-end (key is in `.env`), commit the changelog, then PR to `main`. Two carried-over notes: the sibling `pipelex-starter-js` diagram-parity follow-up, and the uncommitted `../docs/workspace-overview.md` fix in the workspace-parent repo.
 
 ---
 
@@ -125,25 +158,25 @@ Goal: two compact diagrams that carry the starter's two big ideas. GitHub render
 - [ ] If an API key is available: `make test-inference` or at least one real `uv run piper extract-entities "…"` to confirm the renamed CLI end-to-end.
 - [ ] `CHANGELOG.md` entry: breaking — the placeholder project/CLI is now `piper` (was `my-project`); README overhauled (npx-framed quick start, expected outputs, Mermaid diagrams); bootstrap skill reworked for the single-token placeholder; e2e test file renamed. Style: write "breaking" (not "pre-1.0 breaking"), no hardcoded counts.
 - [ ] Decide with the user: cut a release now via the `/release` skill, or leave for a later batch.
-- [ ] Commit(s) on the working branch, PR to `main`. Suggested split: (1) rename sweep + bootstrap rework, (2) README DevX + diagrams. Leave nothing staged-but-uncommitted at handoff.
+- [ ] Commit(s) on the working branch, PR to `main`. Suggested split: (1) rename sweep + bootstrap rework ✅ (`97a28b2`+`6d5adbf`), (2) README DevX + diagrams ✅ (`defe0ec`). **Remaining: the CHANGELOG commit**, then open the PR. Leave nothing staged-but-uncommitted at handoff.
 
 ## Open questions
 
 Still open (resolve at the start of the next session):
 
-1. **"remade charts" = Mermaid charts?** Assumed yes (speech-to-text reading). Confirm before Phase 4. *(Still open.)*
-3. **API key availability:** capturing real expected outputs for the README (Phase 3) and the end-to-end check (Phase 5) needs `PIPELEX_API_KEY` in `.env`. Is one available in the session? *(Still open — Phase 3 needs it, or fall back to output from a previous real run verified against `piper/examples/extract_entities.py`.)*
 4. **CHANGELOG history:** plan says leave old entries' `my_project` references as historical record. Veto if you'd rather rewrite them. *(Still open — Phase 5.)*
 
 Resolved:
 
+1. ~~**"remade charts" = Mermaid charts?**~~ → **RESOLVED: yes, Mermaid** (user confirmed this session). Two fenced ` ```mermaid ` blocks, validated locally with `mmdc`.
 2. ~~**Branch strategy**~~ → **RESOLVED: stacked on `feature/Parity-to-JS`** (did not merge to `main` first; no fresh branch cut). Phases 1–2 are committed there.
+3. ~~**API key availability**~~ → **RESOLVED: a working `PIPELEX_API_KEY` is in `.env`** (user confirmed "run the API"). Real `extract-entities` + `summarize-pdf` outputs captured for the README; `generate-image` left un-run (shape shown from the model). The key is still available for Phase 5's end-to-end check.
 
 ## Key files map (post-Phase-1/2; for orientation, verify with grep — don't trust line numbers)
 
 The placeholder token everywhere below is now `piper` / `Piper` (not `my_project`). Build backend is `[tool.setuptools]`.
 
-- `README.md` — **the Phase 3 target.** H1 `# Piper ⚡️`, italic *Replace "Piper"…* line, "Use this template"/"Next steps" block, Quick start, Project structure, How it works, Useful commands. Still all Phase-1 token-swapped text — the real DevX rewrite hasn't happened.
+- `README.md` — **Phases 3–4 landed here (uncommitted).** H1 `# Piper ⚡️`, `*Replace "Piper"…` line (kept for the anchor), `### Use this template` (bootstrap-first, kept for the anchor), Quick start (npx-framed + real output), "Try the demos", "How it works" (Mermaid flowchart), "Execution modes: durable vs blocking" (Mermaid sequence), Project structure, Useful commands. The two anchors and `[MIT license](LICENSE)` are intact — if Phase 5 rewords the template block, keep them in sync with `bootstrap.py`.
 - `.claude/skills/bootstrap/scripts/bootstrap.py` — **Phase 2 rework landed here.** `TEMPLATE_NAME`/`TEMPLATE_TITLE` constants + the `PIPER_*`/`SURVIVING_NAME_RE` regexes near the top; `apply_name_tokens()` (context-aware char-after rule), `transform_pyproject()` (the `key_edits` dict), `strip_template_block()` / `transform_readme()` (README anchors — **keep in sync if Phase 3 rewords the "Use this template"/italic blocks**), `run()` (transform→assert→write).
 - `.claude/skills/bootstrap/SKILL.md` — operator instructions; now describes the three name forms (dist/package/title).
 - `CLAUDE.md` (repo) — Architecture section names the CLI (`piper`) and package (`piper/`).
