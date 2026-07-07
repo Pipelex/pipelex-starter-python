@@ -157,6 +157,8 @@ The other demos run through the exact same path — they differ only in their in
 
 Every command takes `--mode` (env var `PIPELEX_EXECUTION_MODE`). The default is **durable**, and `generate-image` is the demo that shows why:
 
+### Blocking vs durable
+
 Blocking mode is the shortest path, but only durable mode is safe for runs that can cross the hosted timeout:
 
 ```mermaid
@@ -175,6 +177,8 @@ sequenceDiagram
     end
     API-->>U: result
 ```
+
+### Durable attended vs detached
 
 Once a run is durable, choose whether this terminal waits or exits after printing the run id:
 
