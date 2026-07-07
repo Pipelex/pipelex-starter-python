@@ -157,6 +157,8 @@ The other demos run through the exact same path — they differ only in their in
 
 Every command takes `--mode` (env var `PIPELEX_EXECUTION_MODE`). The default is **durable**, and `generate-image` is the demo that shows why:
 
+Blocking mode is the shortest path, but only durable mode is safe for runs that can cross the hosted timeout:
+
 ```mermaid
 sequenceDiagram
     participant U as You (piper CLI)
@@ -166,6 +168,21 @@ sequenceDiagram
     API-->>U: result (only if it finishes under ~30s)
     API--xU: past ~30s → timeout, "switch to durable"
     Note over U,API: durable attended (default) — survives the cap
+    U->>API: start(pipe, bundle, inputs)
+    API-->>U: run id (printed first, so Ctrl-C is safe)
+    loop poll every few seconds
+        U->>API: wait_for_result(run id)
+    end
+    API-->>U: result
+```
+
+Once a run is durable, choose whether this terminal waits or exits after printing the run id:
+
+```mermaid
+sequenceDiagram
+    participant U as You (piper CLI)
+    participant API as Hosted Pipelex API
+    Note over U,API: durable attended (default) — this terminal waits
     U->>API: start(pipe, bundle, inputs)
     API-->>U: run id (printed first, so Ctrl-C is safe)
     loop poll every few seconds
