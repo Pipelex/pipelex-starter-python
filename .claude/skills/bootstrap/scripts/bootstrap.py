@@ -54,8 +54,9 @@ DIST_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
 PIPER_TITLE_RE = re.compile(r"\bPiper\b")
 PIPER_PACKAGE_RE = re.compile(r"\bpiper(?=[._/])")
 PIPER_DIST_RE = re.compile(r"\bpiper\b")
-# Post-substitution safety net: no placeholder token may survive a transform.
-# `\b...\b` avoids false positives on a user name that embeds it (e.g. "sandpiper").
+# Post-substitution safety net: no placeholder token may survive the neutral
+# probe transform. `\b...\b` avoids false positives on a user name that embeds it
+# (e.g. "sandpiper").
 SURVIVING_NAME_RE = re.compile(r"\b[Pp]iper\b")
 
 
@@ -400,6 +401,36 @@ class Options:
     use_git: bool
 
 
+SURVIVOR_PROBE_NAMES = Names(
+    dist="starter-dist-token",
+    package="starter_package_token",
+    title="Starter Title Token",
+)
+
+
+def survivor_probe_options(opts: Options) -> Options:
+    """Mirror the user's transform path with neutral values that cannot trip the survivor check."""
+
+    if opts.lic.kind == "proprietary":
+        probe_spdx = "LicenseRef-Proprietary"
+    elif opts.lic.kind == "mit":
+        probe_spdx = "MIT"
+    else:
+        probe_spdx = "Apache-2.0"
+
+    probe_holder = "Starter Author" if opts.lic.kind != "mit" or opts.lic.holder else None
+    return Options(
+        description="Starter description token",
+        author_name="Starter Author" if opts.author_name else None,
+        author_email="starter@example.com" if opts.author_email else None,
+        repo_url="https://example.com/starter-project" if opts.repo_url else None,
+        lic=License(kind=opts.lic.kind, spdx=probe_spdx, holder=probe_holder, year=2000),
+        clean=opts.clean,
+        dry_run=opts.dry_run,
+        use_git=opts.use_git,
+    )
+
+
 def gather_target_files(root: Path, names: Names) -> list[Path]:
     """The explicit set of files that may contain the name. Kept narrow on
     purpose: we never sweep .venv, uv.lock, .git, .github or .pipelex traces."""
@@ -443,6 +474,15 @@ def transform_for(path: Path, text: str, names: Names, opts: Options) -> str:
     if name == "LICENSE":
         return transform_license(text, opts)
     return transform_generic(text, names)
+
+
+def find_surviving_placeholders(path: Path, root: Path, original: str, opts: Options) -> list[str]:
+    probe = transform_for(path, original, SURVIVOR_PROBE_NAMES, survivor_probe_options(opts))
+    survivors: list[str] = []
+    for line_number, line in enumerate(probe.splitlines(), start=1):
+        if SURVIVING_NAME_RE.search(line):
+            survivors.append(f"{path.relative_to(root)}:{line_number}: {line.strip()}")
+    return survivors
 
 
 def run(root: Path, names: Names, opts: Options) -> None:
@@ -490,9 +530,7 @@ def run(root: Path, names: Names, opts: Options) -> None:
     for path in gather_target_files(root, scan_names):
         original = path.read_text(encoding="utf-8")
         updated = transform_for(path, original, names, opts)
-        for line_number, line in enumerate(updated.splitlines(), start=1):
-            if SURVIVING_NAME_RE.search(line):
-                survivors.append(f"{path.relative_to(root)}:{line_number}: {line.strip()}")
+        survivors.extend(find_surviving_placeholders(path, root, original, opts))
         planned.append((path, original, updated))
 
     if survivors:
