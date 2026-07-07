@@ -1,6 +1,17 @@
 # TODOS — "piper" rename + README DevX + Mermaid illustrations
 
-Implementation plan for the next session. Written 2026-07-07 after a taste discussion about the starter's example command lines. Everything below is decided unless listed under **Open questions**. No code has been written yet.
+Implementation plan spanning five phases. Written 2026-07-07 after a taste discussion about the starter's example command lines. Everything below is decided unless listed under **Open questions**.
+
+> ## ▶ START HERE (cold start) — updated 2026-07-07
+>
+> **Phases 1–2 are DONE and committed.** Resume at **Phase 3 (README DevX)**.
+>
+> - Branch `feature/Parity-to-JS`, **tree clean**, 3 commits ahead of `main`: `1a08426` (pre-existing examples) · `97a28b2` (the `git mv` renames) · `6d5adbf` (content edits + bootstrap rework).
+> - Read the **CHECKPOINT 1 — STATUS** block (just below Phase 2) first — it carries the decisions, the one plan deviation, and the exact code state. The template placeholder is now the single token `piper`/`Piper`; the CLI answers to `uv run piper …`.
+> - **Still open (pick up at session start):** Q1 (confirm Mermaid) before Phase 4, Q3 (API key for real README outputs) for Phase 3, Q4 (changelog history) for Phase 5 — see **Open questions**. Q2 (branch strategy) is resolved.
+> - **One loose end outside this repo:** the `../docs/workspace-overview.md` fix is committed *nowhere yet* — it sits **uncommitted in the workspace-parent repo** (`/Users/lchoquel/repos/Pipelex`). Commit it there separately or drop it.
+>
+> Everything from here down is the original plan. The "Context"/"Decisions" sections are the rationale (past tense now); the per-phase checklists show what's ticked.
 
 ## Context for a cold start
 
@@ -14,13 +25,13 @@ This repo is a GitHub **template** (`pipelex-starter-python`): a Python CLI star
 - **Keep `uv run` in the examples; fix the framing, not the command.** `uv run` is Python's `npx`/`npm run` — stateless, shell-agnostic, copy-paste reliable. The activate-the-venv alternative looks cleaner but fails confusingly in every new terminal. The fix: a one-line explainer **before** the first command ("`uv run` runs a command inside this project's environment — think `npx` for Python"). Today that explanation sits in a parenthetical *after* the first command (README "Quick start" section).
 - **"Illustrations using Mermaid charts."** The user's request said "remade charts", interpreted as **Mermaid** charts (GitHub renders Mermaid natively in READMEs). Confirm this reading at session start — it's in Open questions.
 
-### Discovered drift (pre-existing, fix as part of this work)
+### Discovered drift (pre-existing) — ✅ RESOLVED in Phase 1/2
 
-- The bootstrap script still handles a `TestMyProject` class (`TEMPLATE_CAMEL` in `scripts/bootstrap.py`) and renames `tests/e2e/test_my_project.py`, but **no `TestMyProject` class exists anymore** — the e2e classes were renamed when the demo set was completed (`TestExtractEntities`, `TestSummarizePdf`, `TestGenerateImage`). Only the *file name* `test_my_project.py` still carries the placeholder. Fix: rename that file to `tests/e2e/test_extract_entities.py` (matching its siblings) and delete the camel/test-class machinery from bootstrap entirely. After that, bootstrap has only three name forms: dist (dashes), package (underscores), title.
+- The bootstrap script used to handle a `TestMyProject` class (`TEMPLATE_CAMEL`) and rename `tests/e2e/test_my_project.py`, but no such class existed anymore. **Fixed:** the file is now `tests/e2e/test_extract_entities.py` (matching its siblings `test_summarize_pdf.py` / `test_generate_image.py`), and the camel/test-class machinery is deleted from bootstrap. Bootstrap now has three name forms: dist (dashes), package (underscores), title.
 
-### Current git state
+### Current git state — updated 2026-07-07
 
-- Branch `feature/Parity-to-JS`, clean tree, one commit ahead of `main` ("Complete the set pf examples" — note the typo, it's in history). Decide branch strategy at session start (Open questions).
+- Branch `feature/Parity-to-JS`, **tree clean**, 3 commits ahead of `main`: `1a08426` (pre-existing "Complete the set pf examples" — note the typo, it's in history) · `97a28b2` (renames) · `6d5adbf` (content edits + bootstrap rework). Branch strategy resolved (stacked; see CHECKPOINT 1 — STATUS). No PR opened yet.
 
 ---
 
@@ -65,17 +76,17 @@ Goal: bootstrap still turns the template into a user's project in one determinis
 **Done:** Phases 1 and 2 complete and verified. Ready for Phase 3.
 
 **Open-question resolutions taken this session:**
-- **Q2 Branch strategy → stacked on `feature/Parity-to-JS`** (did not merge to main first). Rationale: already on it, tree was clean, and this work builds directly on its "Complete the set of examples" commit. Still one commit ahead of `main` + this uncommitted work.
+- **Q2 Branch strategy → stacked on `feature/Parity-to-JS`** (did not merge to main first). Rationale: already on it, and this work builds directly on its "Complete the set of examples" commit. Phases 1–2 are now committed there (see "Current state of the code" below); 3 commits ahead of `main`.
 - Q1 (Mermaid), Q3 (API key), Q4 (changelog history) are Phase 3–5 concerns — not needed for this checkpoint, left for the next session to resolve.
 
 **Key deviation (important for the record):** the plan's Phase 2 rule ".py files: every `piper` → package form; no dist-form occurrences exist in code" was **incorrect**. The user-facing CLI hint strings in `piper/cli.py`, `piper/errors.py`, `piper/runner.py` reference the console-script (dist) name. The fix was a **single context-aware char-after rule** used uniformly for `.py` and `.md` (piper before `.`/`_`/`/` → package; else → dist; `Piper` → title), with `pyproject.toml` on targeted per-key edits. Net result is cleaner than the planned per-filetype split.
 
 **Current state of the code:**
-- Branch `feature/Parity-to-JS`. **Nothing committed** (per "commit only when asked"). Staging is mixed exactly as bootstrap itself produces: package-dir + test-file renames are **staged** (`R`/`RM`, from `git mv`); content edits are **unstaged** (`M`); `TODOS.md` is staged (`A`).
-- Package is `piper/`; CLI answers to `uv run piper …`; `uv.lock` regenerated to `piper v0.12.0`.
-- `make agent-check` + `make agent-test` green on the main repo; standalone `pyright` on `bootstrap.py` clean.
-- **Cross-repo:** `../docs/workspace-overview.md` has one **uncommitted** edit in the *workspace-parent* git repo (`/Users/lchoquel/repos/Pipelex`). Commit it there separately (or drop it) — it is not part of this repo's change set. Phase 5's changelog need not mention it.
-- Scratch clone (with its own `.venv`) lives at `scratchpad/scratch-clone` — ephemeral, safe to ignore/delete.
+- Branch `feature/Parity-to-JS`, **tree clean, Phases 1–2 committed** in two commits: `97a28b2` (the `git mv` renames) then `6d5adbf` (content edits across `pyproject.toml`, `README.md`, `CLAUDE.md`, `piper/**`, `tests/**`, `uv.lock`, plus the `bootstrap` skill + SKILL.md rework). Now 3 ahead of `main`. No PR yet. **Note the two commits do not match the plan's Phase 5 "suggested split"** — they're both Phase 1+2 work (renames, then content+bootstrap); the Phase 3–4 "README DevX + diagrams" commit does not exist yet.
+- Package is `piper/`; CLI answers to `uv run piper …`; `uv.lock` pins `piper v0.12.0`.
+- At commit time `make agent-check` + `make agent-test` were green on the main repo; standalone `pyright` on `bootstrap.py` clean. (Re-run at the start of Phase 3 to reconfirm — cheap.)
+- **Cross-repo loose end (still open):** `../docs/workspace-overview.md` has one **uncommitted** edit in the *workspace-parent* git repo (`/Users/lchoquel/repos/Pipelex`) — `my_project/`→`piper/` plus a stale-dependency-claim fix. It was NOT swept up by the starter-repo commits. Commit it there separately (or drop it). Phase 5's changelog need not mention it.
+- The Phase-2 verification scratch clone lived under the *previous* session's scratchpad — it is gone in a fresh session. To re-verify bootstrap, make a new scratch clone (copy the repo, `git init`, run `bootstrap.py` with a two-word `--package`).
 
 **For Phase 3 (next):** the README still has the Phase-1 token-swapped text (H1 `# Piper ⚡️`, the italic *Replace "Piper"…* line, `uv run piper …` commands). When rewording the "Use this template"/"Next steps"/italic blocks, keep `strip_template_block()`/`transform_readme()` anchors in `bootstrap.py` in sync (Phase 2 coupling).
 
@@ -116,19 +127,25 @@ Goal: two compact diagrams that carry the starter's two big ideas. GitHub render
 - [ ] Decide with the user: cut a release now via the `/release` skill, or leave for a later batch.
 - [ ] Commit(s) on the working branch, PR to `main`. Suggested split: (1) rename sweep + bootstrap rework, (2) README DevX + diagrams. Leave nothing staged-but-uncommitted at handoff.
 
-## Open questions (resolve at session start)
+## Open questions
 
-1. **"remade charts" = Mermaid charts?** Assumed yes (speech-to-text reading). Confirm before Phase 4.
-2. **Branch strategy:** `feature/Parity-to-JS` is one commit ahead of `main` and this work builds on its examples. Stack on it, or merge it to `main` first and start a fresh branch (suggested name: `feature/piper-rename-readme-devx`)?
-3. **API key availability:** capturing real expected outputs for the README (Phase 3) and the end-to-end check (Phase 5) needs `PIPELEX_API_KEY` in `.env`. Is one available in the session?
-4. **CHANGELOG history:** plan says leave old entries' `my_project` references as historical record. Veto if you'd rather rewrite them.
+Still open (resolve at the start of the next session):
 
-## Key files map (for orientation, verify with grep — don't trust line numbers)
+1. **"remade charts" = Mermaid charts?** Assumed yes (speech-to-text reading). Confirm before Phase 4. *(Still open.)*
+3. **API key availability:** capturing real expected outputs for the README (Phase 3) and the end-to-end check (Phase 5) needs `PIPELEX_API_KEY` in `.env`. Is one available in the session? *(Still open — Phase 3 needs it, or fall back to output from a previous real run verified against `piper/examples/extract_entities.py`.)*
+4. **CHANGELOG history:** plan says leave old entries' `my_project` references as historical record. Veto if you'd rather rewrite them. *(Still open — Phase 5.)*
 
-- `pyproject.toml` — placeholder in: project name, `[project.scripts]`, hatch packages/package-data, mypy `packages`, pyright `include`, Repository URL.
-- `.claude/skills/bootstrap/SKILL.md` — the skill's operator instructions; describes the (soon obsolete) four name forms.
-- `.claude/skills/bootstrap/scripts/bootstrap.py` — `TEMPLATE_*` constants near the top; `apply_name_tokens()`, `transform_pyproject()`, `strip_template_block()`, `transform_readme()`, `transform_generic()`, `gather_target_files()` are the functions the Phase 2 rework touches.
-- `README.md` — H1 + italic replace-me line, "Use this template" block, Quick start, Project structure, How it works, Useful commands.
-- `CLAUDE.md` (repo) — Architecture section names the CLI and package.
-- `piper/` (post-rename; today `my_project/`) — `cli.py`, `runner.py`, `errors.py`, `file_input.py`, `examples/`, `methods/`.
-- `tests/e2e/test_my_project.py` — contains `TestExtractEntities` (not `TestMyProject`); renamed in Phase 1.
+Resolved:
+
+2. ~~**Branch strategy**~~ → **RESOLVED: stacked on `feature/Parity-to-JS`** (did not merge to `main` first; no fresh branch cut). Phases 1–2 are committed there.
+
+## Key files map (post-Phase-1/2; for orientation, verify with grep — don't trust line numbers)
+
+The placeholder token everywhere below is now `piper` / `Piper` (not `my_project`). Build backend is `[tool.setuptools]`.
+
+- `README.md` — **the Phase 3 target.** H1 `# Piper ⚡️`, italic *Replace "Piper"…* line, "Use this template"/"Next steps" block, Quick start, Project structure, How it works, Useful commands. Still all Phase-1 token-swapped text — the real DevX rewrite hasn't happened.
+- `.claude/skills/bootstrap/scripts/bootstrap.py` — **Phase 2 rework landed here.** `TEMPLATE_NAME`/`TEMPLATE_TITLE` constants + the `PIPER_*`/`SURVIVING_NAME_RE` regexes near the top; `apply_name_tokens()` (context-aware char-after rule), `transform_pyproject()` (the `key_edits` dict), `strip_template_block()` / `transform_readme()` (README anchors — **keep in sync if Phase 3 rewords the "Use this template"/italic blocks**), `run()` (transform→assert→write).
+- `.claude/skills/bootstrap/SKILL.md` — operator instructions; now describes the three name forms (dist/package/title).
+- `CLAUDE.md` (repo) — Architecture section names the CLI (`piper`) and package (`piper/`).
+- `piper/` — `cli.py`, `runner.py`, `errors.py`, `file_input.py`, `examples/` (per-demo `parse()` + output models — `extract_entities.py` is the shape to match for Phase 3's expected-output JSON), `methods/`.
+- `tests/e2e/test_extract_entities.py` — the renamed e2e file; class is `TestExtractEntities`. Siblings `test_summarize_pdf.py`, `test_generate_image.py`.
