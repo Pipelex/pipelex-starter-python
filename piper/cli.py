@@ -1,9 +1,9 @@
-"""The `my-project` CLI — demo Pipelex methods behind a Typer app.
+"""The `piper` CLI — demo Pipelex methods behind a Typer app.
 
 Commands stay thin: parse arguments, dispatch on execution mode via
-`my_project.runner`, narrow + render via the matching `my_project.examples`
+`piper.runner`, narrow + render via the matching `piper.examples`
 module. SDK errors are caught once per command (in `_run_cli`) and presented by
-`my_project.errors`; anything unexpected crashes loudly.
+`piper.errors`; anything unexpected crashes loudly.
 """
 
 import asyncio
@@ -17,9 +17,12 @@ from mthds.protocol.exceptions import PipelineRequestError
 from pipelex_sdk.runs import RunResultCompleted, RunResultFailed, RunResultRunning, RunResults, RunResultState
 from rich.console import Console
 
-from my_project.errors import present_error
-from my_project.examples import extract_entities as extract_entities_example
-from my_project.runner import (
+from piper.errors import present_error
+from piper.examples import extract_entities as extract_entities_example
+from piper.examples import generate_image as generate_image_example
+from piper.examples import summarize_pdf as summarize_pdf_example
+from piper.file_input import build_document_input
+from piper.runner import (
     ExecutionMode,
     fetch_run_result,
     fetch_run_status,
@@ -40,7 +43,7 @@ app.add_typer(runs_app, name="runs")
 output_console = Console()
 
 MODE_HELP = "How to execute the run: `durable` (start + poll, survives anything) or `blocking` (single call, ~30s cap on hosted)."
-DETACH_HELP = "Start the run and exit immediately; fetch it later with `my-project runs ...` (durable mode only)."
+DETACH_HELP = "Start the run and exit immediately; fetch it later with `piper runs ...` (durable mode only)."
 
 
 @app.callback()
@@ -72,6 +75,58 @@ def extract_entities(
     # as JSON — the same rendering `runs result` / `runs wait` give.
     entities = extract_entities_example.parse(results)
     output_console.print_json(data=entities.model_dump())
+
+
+@app.command(name="summarize-pdf")
+def summarize_pdf(
+    file: Annotated[Path, typer.Argument(help="Path to the PDF (or other document) to summarize.")],
+    mode: Annotated[ExecutionMode, typer.Option(envvar="PIPELEX_EXECUTION_MODE", help=MODE_HELP)] = ExecutionMode.DURABLE,
+    detach: Annotated[bool, typer.Option("--detach", help=DETACH_HELP)] = False,
+) -> None:
+    """Summarize a document into a title, type, and key points."""
+    if not file.is_file():
+        msg = f"No such file: {file}"
+        raise typer.BadParameter(msg)
+    bundle = summarize_pdf_example.BUNDLE_PATH.read_text()
+    results = _dispatch(
+        pipe_code=summarize_pdf_example.PIPE_CODE,
+        bundle=bundle,
+        inputs={"document": build_document_input(file)},
+        mode=mode,
+        detach=detach,
+    )
+    if results is None:
+        return
+    summary = summarize_pdf_example.parse(results)
+    output_console.print_json(data=summary.model_dump())
+
+
+@app.command(name="generate-image")
+def generate_image(
+    prompt: Annotated[str | None, typer.Argument(help="The text prompt describing the image to generate.")] = None,
+    file: Annotated[Path | None, typer.Option("--file", help="Read the prompt from a file instead of the argument.")] = None,
+    mode: Annotated[ExecutionMode, typer.Option(envvar="PIPELEX_EXECUTION_MODE", help=MODE_HELP)] = ExecutionMode.DURABLE,
+    detach: Annotated[bool, typer.Option("--detach", help=DETACH_HELP)] = False,
+) -> None:
+    """Generate an image from a text prompt.
+
+    Image generation routinely outlives the hosted ~30s blocking cap, so this is
+    the example to run with `--mode blocking` to see a timeout — then `--mode
+    durable` (the default) to actually get an image.
+    """
+    image_prompt = _read_text_input(text=prompt, file=file)
+    bundle = generate_image_example.BUNDLE_PATH.read_text()
+    results = _dispatch(
+        pipe_code=generate_image_example.PIPE_CODE,
+        bundle=bundle,
+        inputs={"image_prompt": image_prompt},
+        mode=mode,
+        detach=detach,
+    )
+    if results is None:
+        return
+    image = generate_image_example.parse(results)
+    output_console.print_json(data=image.model_dump())
 
 
 @runs_app.command(name="status")
@@ -121,7 +176,7 @@ def _dispatch(*, pipe_code: str, bundle: str, inputs: dict[str, Any], mode: Exec
                 pass
         run_id = _run_cli(start_detached(pipe_code=pipe_code, bundle=bundle, inputs=inputs))
         print(run_id)
-        progress_console.print(f"Run started — fetch it later with: [bold]my-project runs wait {run_id}[/bold]")
+        progress_console.print(f"Run started — fetch it later with: [bold]piper runs wait {run_id}[/bold]")
         return None
     match mode:
         case ExecutionMode.BLOCKING:
@@ -149,7 +204,7 @@ def _render_result_state(state: RunResultState) -> None:
     match state:
         case RunResultRunning():
             progress_console.print(
-                f"Run {state.pipeline_run_id} is still running — wait for it with: [bold]my-project runs wait {state.pipeline_run_id}[/bold]"
+                f"Run {state.pipeline_run_id} is still running — wait for it with: [bold]piper runs wait {state.pipeline_run_id}[/bold]"
             )
         case RunResultCompleted():
             _print_raw_results(state.result)

@@ -2,16 +2,19 @@
 """Rename the pipelex-starter-python template placeholders to a real project.
 
 This is the deterministic engine behind the `/bootstrap` skill. It does the
-mechanical, error-prone part — renaming the package directory, the e2e test
-file, and substituting four different spellings of the project name across the
-code, config, docs, and license — so the skill (and the human) can focus on
-collecting good inputs and verifying the result.
+mechanical, error-prone part — renaming the package directory and substituting
+the project name (in its dist, package, and title forms) across the code,
+config, docs, and license — so the skill (and the human) can focus on collecting
+good inputs and verifying the result.
 
-Why a script instead of a pile of Edit calls: the same name appears in four
-forms (dash / underscore / Title Case / CamelCase) scattered across many files,
-plus two filesystem renames. Doing that by hand once is fine; doing it reliably
-every time someone clones the template is exactly what a script is for. It is
-also safe to run with --dry-run, which is what makes it testable.
+Why a script instead of a pile of Edit calls: the placeholder `piper` is a
+single token that must become two different targets depending on context — the
+dash-form distribution / CLI name in command positions, the underscore-form
+package name in imports and paths — plus the `Piper` title and one filesystem
+rename. Getting that split right by hand every time someone clones the template
+is exactly what a script is for. It is also safe to run with --dry-run, which is
+what makes it testable, and it hard-fails if any placeholder token survives the
+substitution.
 
 The script only transforms files. It does NOT touch git, run `uv lock`, run the
 checks, or remove the bootstrap skill — the SKILL.md orchestrates those so each
@@ -31,12 +34,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-# The template's placeholders, in their four spellings. Everything the script
-# does is ultimately "turn these into the user's chosen name".
-TEMPLATE_DIST = "my-project"  # distribution name (pyproject [project].name, PyPI-style)
-TEMPLATE_PACKAGE = "my_project"  # importable package / directory name
-TEMPLATE_TITLE = "My Project"  # human-facing display name (README H1)
-TEMPLATE_CAMEL = "MyProject"  # only ever seen inside the test class TestMyProject
+# The template's placeholder is a single token — `piper` (title-cased `Piper`).
+# Everything the script does is ultimately "turn this into the user's name".
+# It is deliberately one word so the dist name, package dir, and CLI command are
+# all the same token in the template; the split into forms happens at rename time.
+TEMPLATE_NAME = "piper"  # dist name, package dir, and CLI command (all one token in the template)
+TEMPLATE_TITLE = "Piper"  # human-facing display name (README H1)
 
 PACKAGE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 # PEP 503/508 distribution name: alphanumerics separated by single '.', '-' or
@@ -44,19 +47,26 @@ PACKAGE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 # else (e.g. a name with spaces), so we validate before writing [project].name.
 DIST_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
 
+# The single placeholder token maps to two targets by context. We disambiguate
+# on the character that immediately follows it: a `.`, `_`, or `/` means it is a
+# dotted module path, an identifier, or a filesystem path (package form); any
+# other boundary means it is the bare CLI command / distribution name (dist form).
+PIPER_TITLE_RE = re.compile(r"\bPiper\b")
+PIPER_PACKAGE_RE = re.compile(r"\bpiper(?=[._/])")
+PIPER_DIST_RE = re.compile(r"\bpiper\b")
+# Post-substitution safety net: no placeholder token may survive the neutral
+# probe transform. `\b...\b` avoids false positives on a user name that embeds it
+# (e.g. "sandpiper").
+SURVIVING_NAME_RE = re.compile(r"\b[Pp]iper\b")
+
 
 @dataclass(frozen=True)
 class Names:
-    """The four spellings of the new project name, derived from one another."""
+    """The three forms of the new project name, derived from one another."""
 
     dist: str  # e.g. "invoice-extractor"
     package: str  # e.g. "invoice_extractor"
     title: str  # e.g. "Invoice Extractor"
-    camel: str  # e.g. "InvoiceExtractor"
-
-
-def camel_from_package(package: str) -> str:
-    return "".join(part.capitalize() for part in package.split("_") if part)
 
 
 def title_from_package(package: str) -> str:
@@ -164,16 +174,26 @@ def toml_str(value: str) -> str:
 
 
 def apply_name_tokens(text: str, names: Names) -> str:
-    """Substitute every spelling of the template name with the new one.
+    """Substitute the template name, resolving each occurrence by context.
 
-    The four tokens are mutually non-overlapping (no token is a substring of
-    another — "MyProject" only ever appears inside "TestMyProject", which we
-    handle as its own token), so the order of replacement does not matter.
+    The placeholder is a single token — `piper` / `Piper` — that must become one
+    of three targets depending on where it sits:
+      * `Piper`                       -> the title
+      * `piper` before `.`, `_`, `/`  -> the package form (imports, dotted module
+                                          paths, filesystem paths, identifiers)
+      * any other `piper`             -> the dist form (the CLI command name and
+                                          the distribution name)
+
+    Order matters: title first, then the package rule (which consumes the
+    dotted / path occurrences), then the dist rule mops up what is left. This is
+    the generic pass for .py / .md / .mthds files. pyproject.toml is handled by
+    targeted per-key edits in transform_pyproject() instead, because its package
+    arrays (`packages = ["piper"]`) put the package form in a bare-string
+    position this character-after heuristic would misread as a command.
     """
-    text = text.replace(f"Test{TEMPLATE_CAMEL}", f"Test{names.camel}")
-    text = text.replace(TEMPLATE_TITLE, names.title)
-    text = text.replace(TEMPLATE_PACKAGE, names.package)
-    text = text.replace(TEMPLATE_DIST, names.dist)
+    text = PIPER_TITLE_RE.sub(names.title, text)
+    text = PIPER_PACKAGE_RE.sub(names.package, text)
+    text = PIPER_DIST_RE.sub(names.dist, text)
     return text
 
 
@@ -204,9 +224,9 @@ def transform_pyproject(text: str, names: Names, opts: "Options") -> str:
             f"authors = [{author_inner}]",
         )
 
-    # Repository URL: if given, drop in the real URL and remove the reminder
-    # comment. If not, the token pass below rewrites my-project -> dist and we
-    # leave the `yourusername` placeholder + reminder comment in place on purpose.
+    # Repository URL: with --repo-url, drop in the real URL and remove the
+    # reminder comment. Without it, rewrite only the `yourusername/piper` slug to
+    # the dist name and leave the `yourusername` placeholder + reminder in place.
     if opts.repo_url:
         # Double backslashes so re.sub's replacement mini-language treats any
         # backslash from toml_str() as literal rather than a group reference.
@@ -216,14 +236,37 @@ def transform_pyproject(text: str, names: Names, opts: "Options") -> str:
             repository_line,
             text,
         )
+    else:
+        text = text.replace(f"yourusername/{TEMPLATE_NAME}", f"yourusername/{names.dist}")
 
-    return apply_name_tokens(text, names)
+    # Name tokens: targeted per-key edits rather than the character-after pass,
+    # because a package name sitting bare in a TOML array (`packages = ["piper"]`)
+    # or as a bare table key looks like a command position to the generic
+    # heuristic. Each occurrence is edited by its key; the post-run assertion in
+    # run() is the backstop that catches any key not handled here.
+    key_edits = {
+        # [project].name -> distribution name
+        f'name = "{TEMPLATE_NAME}"': f"name = {toml_str(names.dist)}",
+        # [project.scripts]: <dist-command> = "<package>.cli:app"
+        f'{TEMPLATE_NAME} = "{TEMPLATE_NAME}.cli:app"': f'{names.dist} = "{names.package}.cli:app"',
+        # [tool.setuptools] packages (import names)
+        f'packages = ["{TEMPLATE_NAME}", "{TEMPLATE_NAME}.examples"]': f'packages = ["{names.package}", "{names.package}.examples"]',
+        # [tool.setuptools.package-data] table key (import name)
+        f'{TEMPLATE_NAME} = ["py.typed"': f'{names.package} = ["py.typed"',
+        # [tool.mypy] packages (import name)
+        f'packages = ["{TEMPLATE_NAME}"]': f'packages = ["{names.package}"]',
+        # [tool.pyright] include (import name)
+        f'include = ["{TEMPLATE_NAME}", "tests"]': f'include = ["{names.package}", "tests"]',
+    }
+    for old_text, new_text in key_edits.items():
+        text = text.replace(old_text, new_text)
+    return text
 
 
 def strip_template_block(text: str) -> str:
     """Remove the README's template-only scaffolding.
 
-    Two independent regions are template-only: the `*Replace "My Project" ...*`
+    Two independent regions are template-only: the `*Replace "Piper" ...*`
     reminder line right under the H1, and the whole `### Use this template`
     subsection (with real project prose sitting *between* them). We anchor on the
     heading text and the next H2 boundary rather than a `---` rule or line
@@ -240,7 +283,7 @@ def strip_template_block(text: str) -> str:
         use_end = next((j for j in range(use_start + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
         del lines[use_start:use_end]
 
-    # 2. The standalone `*Replace "My Project" ...*` reminder line.
+    # 2. The standalone `*Replace "Piper" ...*` reminder line.
     replace_idx = next((i for i, ln in enumerate(lines) if ln.startswith('*Replace "')), None)
     if replace_idx is not None:
         del lines[replace_idx]
@@ -358,6 +401,36 @@ class Options:
     use_git: bool
 
 
+SURVIVOR_PROBE_NAMES = Names(
+    dist="starter-dist-token",
+    package="starter_package_token",
+    title="Starter Title Token",
+)
+
+
+def survivor_probe_options(opts: Options) -> Options:
+    """Mirror the user's transform path with neutral values that cannot trip the survivor check."""
+
+    if opts.lic.kind == "proprietary":
+        probe_spdx = "LicenseRef-Proprietary"
+    elif opts.lic.kind == "mit":
+        probe_spdx = "MIT"
+    else:
+        probe_spdx = "Apache-2.0"
+
+    probe_holder = "Starter Author" if opts.lic.kind != "mit" or opts.lic.holder else None
+    return Options(
+        description="Starter description token",
+        author_name="Starter Author" if opts.author_name else None,
+        author_email="starter@example.com" if opts.author_email else None,
+        repo_url="https://example.com/starter-project" if opts.repo_url else None,
+        lic=License(kind=opts.lic.kind, spdx=probe_spdx, holder=probe_holder, year=2000),
+        clean=opts.clean,
+        dry_run=opts.dry_run,
+        use_git=opts.use_git,
+    )
+
+
 def gather_target_files(root: Path, names: Names) -> list[Path]:
     """The explicit set of files that may contain the name. Kept narrow on
     purpose: we never sweep .venv, uv.lock, .git, .github or .pipelex traces."""
@@ -403,6 +476,15 @@ def transform_for(path: Path, text: str, names: Names, opts: Options) -> str:
     return transform_generic(text, names)
 
 
+def find_surviving_placeholders(path: Path, root: Path, original: str, opts: Options) -> list[str]:
+    probe = transform_for(path, original, SURVIVOR_PROBE_NAMES, survivor_probe_options(opts))
+    survivors: list[str] = []
+    for line_number, line in enumerate(probe.splitlines(), start=1):
+        if SURVIVING_NAME_RE.search(line):
+            survivors.append(f"{path.relative_to(root)}:{line_number}: {line.strip()}")
+    return survivors
+
+
 def run(root: Path, names: Names, opts: Options) -> None:
     # Guard: confirm this actually is the unbootstrapped template before we
     # start renaming things. Cheap check, saves a confusing half-applied state.
@@ -410,42 +492,53 @@ def run(root: Path, names: Names, opts: Options) -> None:
     if not pyproject.exists():
         sys.exit(f"No pyproject.toml found in {root} — run this from the project root.")
     pyproject_text = pyproject.read_text(encoding="utf-8")
-    if f'name = "{TEMPLATE_DIST}"' not in pyproject_text:
+    if f'name = "{TEMPLATE_NAME}"' not in pyproject_text:
         print(
-            f'warning: pyproject.toml does not contain name = "{TEMPLATE_DIST}". This repo may already be bootstrapped; proceeding anyway.',
+            f'warning: pyproject.toml does not contain name = "{TEMPLATE_NAME}". This repo may already be bootstrapped; proceeding anyway.',
             file=sys.stderr,
         )
 
     print(f"Bootstrapping template -> {names.title!r}")
-    print(f"  dist={names.dist}  package={names.package}  camel={names.camel}")
+    print(f"  dist={names.dist}  package={names.package}  title={names.title}")
     if opts.dry_run:
         print("  (dry run — no files will be modified)")
     print()
 
-    # 1. Renames first, so the file transforms below see the final paths.
+    # 1. Rename the package directory first, so the file transforms below see the
+    #    final paths. (The e2e test file is named after its demo, not the project,
+    #    so nothing in tests/ needs renaming — only content edits.)
     print("Renames:")
-    old_pkg = root / TEMPLATE_PACKAGE
+    old_pkg = root / TEMPLATE_NAME
     new_pkg = root / names.package
-    if names.package != TEMPLATE_PACKAGE and old_pkg.is_dir():
+    if names.package != TEMPLATE_NAME and old_pkg.is_dir():
         move(root, old_pkg, new_pkg, opts)
-    old_test = root / "tests" / "e2e" / f"test_{TEMPLATE_PACKAGE}.py"
-    new_test = root / "tests" / "e2e" / f"test_{names.package}.py"
-    if names.package != TEMPLATE_PACKAGE and old_test.exists():
-        move(root, old_test, new_test, opts)
-    if opts.use_git and not opts.dry_run and names.package != TEMPLATE_PACKAGE:
-        print("  note: git mv stages the renames; the content edits below are left unstaged.")
+    if opts.use_git and not opts.dry_run and names.package != TEMPLATE_NAME:
+        print("  note: git mv stages the rename; the content edits below are left unstaged.")
     print()
 
-    # During a dry run the renames did not actually happen, so read the file
-    # list from the original paths to still show a meaningful plan.
-    scan_names = names if not opts.dry_run else Names(names.dist, TEMPLATE_PACKAGE, names.title, names.camel)
+    # During a dry run the rename did not actually happen, so read the file list
+    # from the original path to still show a meaningful plan.
+    scan_names = names if not opts.dry_run else Names(names.dist, TEMPLATE_NAME, names.title)
 
-    # 2. Content edits.
+    # 2. Content edits. Transform everything in memory first and assert no
+    #    placeholder token survives before writing a single file — a leftover
+    #    token means a transform rule missed a context, and we would rather abort
+    #    with the locations than ship a half-renamed project.
     print("Edits:")
-    changed = 0
+    planned: list[tuple[Path, str, str]] = []
+    survivors: list[str] = []
     for path in gather_target_files(root, scan_names):
         original = path.read_text(encoding="utf-8")
         updated = transform_for(path, original, names, opts)
+        survivors.extend(find_surviving_placeholders(path, root, original, opts))
+        planned.append((path, original, updated))
+
+    if survivors:
+        joined = "\n  ".join(survivors)
+        sys.exit(f"error: placeholder name token still present after substitution in {len(survivors)} location(s):\n  {joined}")
+
+    changed = 0
+    for path, original, updated in planned:
         if write_file(path, root, original, updated, opts):
             changed += 1
     if changed == 0:
@@ -483,7 +576,7 @@ def main(argv: list[str]) -> None:
     dist = (args.dist or package.replace("_", "-")).strip()
     validate_dist(dist)
     title = (args.title or title_from_package(package)).strip()
-    names = Names(dist=dist, package=package, title=title, camel=camel_from_package(package))
+    names = Names(dist=dist, package=package, title=title)
 
     root = Path(args.root).resolve()
     license_year = args.license_year or datetime.date.today().year

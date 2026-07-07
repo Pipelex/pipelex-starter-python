@@ -2,7 +2,7 @@ import pytest
 from pipelex_sdk.runs import RunResults
 from pydantic import ValidationError
 
-from my_project.examples.extract_entities import parse
+from piper.examples.extract_entities import parse
 
 ENTITIES_CONTENT = {"people": ["Marie Curie", "Pierre Curie"], "orgs": ["University of Paris"], "dates": ["1906"]}
 

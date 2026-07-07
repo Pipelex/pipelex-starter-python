@@ -51,7 +51,7 @@ async def run_durable_attended(*, pipe_code: str, bundle: str, inputs: dict[str,
     """Start a durable run, print its id immediately, then poll it to completion.
 
     The id is printed before polling so the run is never lost: Ctrl-C leaves it
-    executing server-side and you can resume with `my-project runs wait <id>`.
+    executing server-side and you can resume with `piper runs wait <id>`.
     """
     async with PipelexAPIClient() as client:
         start_result = await client.start(pipe_code=pipe_code, mthds_contents=[bundle], inputs=inputs)
@@ -64,7 +64,7 @@ async def start_detached(*, pipe_code: str, bundle: str, inputs: dict[str, Any] 
     """Start a durable run and return its id without waiting.
 
     The run keeps executing server-side; fetch it later with
-    `my-project runs status|result|wait <id>` — even from another terminal.
+    `piper runs status|result|wait <id>` — even from another terminal.
     """
     async with PipelexAPIClient() as client:
         start_result = await client.start(pipe_code=pipe_code, mthds_contents=[bundle], inputs=inputs)
@@ -101,5 +101,5 @@ async def _attend(*, client: PipelexAPIClient, run_id: str) -> RunResults:
             return await client.wait_for_result(run_id, options=WaitForResultOptions(on_poll=on_poll))
         except asyncio.CancelledError:
             # Ctrl-C: the run keeps executing server-side — tell the user how to pick it back up.
-            progress_console.print(f"\nInterrupted — the run is still executing. Resume with: [bold]my-project runs wait {run_id}[/bold]")
+            progress_console.print(f"\nInterrupted — the run is still executing. Resume with: [bold]piper runs wait {run_id}[/bold]")
             raise
