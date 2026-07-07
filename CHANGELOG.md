@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [v0.13.0] - 2026-07-07
 
 - **Breaking:** renamed the starter's placeholder project from `my-project` / `my_project` / `My Project` to `piper` / `Piper`. The console command is now `uv run piper ...`, the template package is `piper/`, `pyproject.toml` points at `piper.cli:app`, and the e2e extract-entities test file no longer carries the project placeholder in its name.
 - **Reworked `/bootstrap` for the single-token placeholder.** It now derives distribution, package, and title forms from `piper`, applies context-aware replacements for command vs import/path positions, edits `pyproject.toml` by key, and aborts before writing if any placeholder tokens survive.
