@@ -157,19 +157,41 @@ The other demos run through the exact same path — they differ only in their in
 
 Every command takes `--mode` (env var `PIPELEX_EXECUTION_MODE`). The default is **durable**, and `generate-image` is the demo that shows why:
 
-### When blocking times out
+### Blocking: finishes under the cap
 
-Blocking mode is the shortest path, but only durable mode is safe for runs that can cross the hosted timeout:
+Blocking mode is a single `client.execute()` call. Use it when you expect the run to finish quickly:
 
 ```mermaid
 sequenceDiagram
     participant U as You (piper CLI)
     participant API as Hosted Pipelex API
-    Note over U,API: blocking — single call, ~30s cap
+    Note over U,API: blocking succeeds: one request, one response
     U->>API: execute(pipe, bundle, inputs)
-    API-->>U: result (only if it finishes under ~30s)
-    API--xU: past ~30s → timeout, "switch to durable"
-    Note over U,API: durable attended (default) — survives the cap
+    API-->>U: result under ~30s
+```
+
+### Blocking: times out
+
+The same blocking call fails when the hosted gateway cap is reached:
+
+```mermaid
+sequenceDiagram
+    participant U as You (piper CLI)
+    participant API as Hosted Pipelex API
+    Note over U,API: blocking fails: run crosses the ~30s cap
+    U->>API: execute(pipe, bundle, inputs)
+    API--xU: PipelineExecuteTimeoutError + durable-mode hint
+```
+
+### Durable attended: wait here
+
+Durable attended mode starts a server-side run, prints the run id first, then keeps this terminal polling until the result is ready:
+
+```mermaid
+sequenceDiagram
+    participant U as You (piper CLI)
+    participant API as Hosted Pipelex API
+    Note over U,API: durable attended: survives the cap
     U->>API: start(pipe, bundle, inputs)
     API-->>U: run id (printed first, so Ctrl-C is safe)
     loop poll every few seconds
@@ -178,25 +200,19 @@ sequenceDiagram
     API-->>U: result
 ```
 
-### Durable attended vs detached
+### Durable detached: collect later
 
-Once a run is durable, choose whether this terminal waits or exits after printing the run id:
+Detached mode starts the same durable server-side run, then exits immediately so you can resume from any terminal:
 
 ```mermaid
 sequenceDiagram
     participant U as You (piper CLI)
     participant API as Hosted Pipelex API
-    Note over U,API: durable attended (default) — this terminal waits
-    U->>API: start(pipe, bundle, inputs)
-    API-->>U: run id (printed first, so Ctrl-C is safe)
-    loop poll every few seconds
-        U->>API: wait_for_result(run id)
-    end
-    API-->>U: result
-    Note over U,API: durable detached (--detach) — start now, collect later
+    Note over U,API: durable detached: start now, collect later
     U->>API: start(pipe, bundle, inputs)
     API-->>U: run id, then exit
-    U->>API: piper runs wait <id> (later, any terminal)
+    Note over U,API: later, any terminal
+    U->>API: piper runs wait <id>
     API-->>U: result
 ```
 
