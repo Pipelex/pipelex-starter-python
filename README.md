@@ -116,12 +116,35 @@ Open `public_url` in a browser to see the image. Run it with `--mode blocking` a
 
 ```mermaid
 flowchart TD
-    A["piper extract-entities '…'"] --> B["read the .mthds bundle<br/>from disk"]
-    B --> C["PipelexAPIClient<br/>(PIPELEX_BASE_URL / PIPELEX_API_KEY)"]
-    C -->|"bundle sent as content (mthds_contents)"| D["hosted Pipelex API<br/>runs the method"]
-    D --> E["results.main_stuff"]
-    E --> F["example parse()<br/>→ typed model"]
-    F --> G["JSON on stdout"]
+    subgraph Local["Local starter"]
+        CLI(["piper extract-entities '…'"]):::operation
+        Bundle[/" .mthds bundle<br/>file on disk "/]:::data
+        Read["read bundle contents"]:::operation
+        Client["create PipelexAPIClient<br/>from env credentials"]:::operation
+    end
+
+    subgraph Hosted["Hosted Pipelex API"]
+        Run["run method from submitted bundle"]:::service
+        MainStuff[/" results.main_stuff "/]:::data
+    end
+
+    subgraph Output["Example output"]
+        Parse["parse() validates<br/>typed model"]:::operation
+        JSON[/" JSON on stdout "/]:::terminal
+    end
+
+    CLI --> Read
+    Bundle --> Read
+    Read --> Client
+    Client -->|"send bundle as content<br/>(mthds_contents)"| Run
+    Run --> MainStuff
+    MainStuff --> Parse
+    Parse --> JSON
+
+    classDef operation fill:#e8f3ff,stroke:#2563eb,stroke-width:1.5px,color:#172554
+    classDef data fill:#fff7ed,stroke:#c2410c,stroke-width:1.5px,color:#431407
+    classDef service fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#064e3b
+    classDef terminal fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a
 ```
 
 1. **Read the bundle.** `piper` reads `methods/extract-entities/main.mthds` from disk and constructs a `PipelexAPIClient`, which picks up `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` from the environment.
