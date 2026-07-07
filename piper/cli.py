@@ -1,9 +1,9 @@
-"""The `my-project` CLI — demo Pipelex methods behind a Typer app.
+"""The `piper` CLI — demo Pipelex methods behind a Typer app.
 
 Commands stay thin: parse arguments, dispatch on execution mode via
-`my_project.runner`, narrow + render via the matching `my_project.examples`
+`piper.runner`, narrow + render via the matching `piper.examples`
 module. SDK errors are caught once per command (in `_run_cli`) and presented by
-`my_project.errors`; anything unexpected crashes loudly.
+`piper.errors`; anything unexpected crashes loudly.
 """
 
 import asyncio
@@ -17,12 +17,12 @@ from mthds.protocol.exceptions import PipelineRequestError
 from pipelex_sdk.runs import RunResultCompleted, RunResultFailed, RunResultRunning, RunResults, RunResultState
 from rich.console import Console
 
-from my_project.errors import present_error
-from my_project.examples import extract_entities as extract_entities_example
-from my_project.examples import generate_image as generate_image_example
-from my_project.examples import summarize_pdf as summarize_pdf_example
-from my_project.file_input import build_document_input
-from my_project.runner import (
+from piper.errors import present_error
+from piper.examples import extract_entities as extract_entities_example
+from piper.examples import generate_image as generate_image_example
+from piper.examples import summarize_pdf as summarize_pdf_example
+from piper.file_input import build_document_input
+from piper.runner import (
     ExecutionMode,
     fetch_run_result,
     fetch_run_status,
@@ -43,7 +43,7 @@ app.add_typer(runs_app, name="runs")
 output_console = Console()
 
 MODE_HELP = "How to execute the run: `durable` (start + poll, survives anything) or `blocking` (single call, ~30s cap on hosted)."
-DETACH_HELP = "Start the run and exit immediately; fetch it later with `my-project runs ...` (durable mode only)."
+DETACH_HELP = "Start the run and exit immediately; fetch it later with `piper runs ...` (durable mode only)."
 
 
 @app.callback()
@@ -176,7 +176,7 @@ def _dispatch(*, pipe_code: str, bundle: str, inputs: dict[str, Any], mode: Exec
                 pass
         run_id = _run_cli(start_detached(pipe_code=pipe_code, bundle=bundle, inputs=inputs))
         print(run_id)
-        progress_console.print(f"Run started — fetch it later with: [bold]my-project runs wait {run_id}[/bold]")
+        progress_console.print(f"Run started — fetch it later with: [bold]piper runs wait {run_id}[/bold]")
         return None
     match mode:
         case ExecutionMode.BLOCKING:
@@ -204,7 +204,7 @@ def _render_result_state(state: RunResultState) -> None:
     match state:
         case RunResultRunning():
             progress_console.print(
-                f"Run {state.pipeline_run_id} is still running — wait for it with: [bold]my-project runs wait {state.pipeline_run_id}[/bold]"
+                f"Run {state.pipeline_run_id} is still running — wait for it with: [bold]piper runs wait {state.pipeline_run_id}[/bold]"
             )
         case RunResultCompleted():
             _print_raw_results(state.result)

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from my_project.file_input import build_document_input
+from piper.file_input import build_document_input
 
 
 class TestBuildDocumentInput:

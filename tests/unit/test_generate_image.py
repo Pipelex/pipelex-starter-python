@@ -2,7 +2,7 @@ import pytest
 from pipelex_sdk.runs import RunResults
 from pydantic import ValidationError
 
-from my_project.examples.generate_image import parse
+from piper.examples.generate_image import parse
 
 IMAGE_CONTENT = {
     "url": "pipelex-storage://runs/abc/image.png",

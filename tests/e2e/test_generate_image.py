@@ -1,7 +1,7 @@
 import pytest
 
-from my_project.examples.generate_image import BUNDLE_PATH, PIPE_CODE, parse
-from my_project.runner import run_durable_attended
+from piper.examples.generate_image import BUNDLE_PATH, PIPE_CODE, parse
+from piper.runner import run_durable_attended
 
 SAMPLE_PROMPT = "A watercolor painting of a fox reading a book under a tree."
 

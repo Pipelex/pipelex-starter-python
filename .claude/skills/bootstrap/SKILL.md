@@ -1,21 +1,21 @@
 ---
 name: bootstrap
-description: Bootstrap this pipelex-starter-python template into a real project — replaces every placeholder name (my-project / my_project / "My Project" / TestMyProject), the package directory, description, author, repo URL and LICENSE holder, then regenerates the lock file and runs the checks and tests. Use this right after creating a repo from the template, or whenever the user says "bootstrap", "set up this template", "rename the project", "initialize the project", "replace the placeholders", "give this project a name", or "make this my own".
+description: Bootstrap this pipelex-starter-python template into a real project — replaces the placeholder name (piper / Piper) everywhere it appears, the package directory, description, author, repo URL and LICENSE holder, then regenerates the lock file and runs the checks and tests. Use this right after creating a repo from the template, or whenever the user says "bootstrap", "set up this template", "rename the project", "initialize the project", "replace the placeholders", "give this project a name", or "make this my own".
 ---
 
 # Bootstrap Workflow
 
-This repo is a GitHub **template**. A fresh clone still has placeholder names everywhere: the distribution name `my-project`, the importable package `my_project` (a directory plus many references), the README title `My Project`, and the e2e test class `TestMyProject`. This skill turns those placeholders into the user's real project name in one reviewable pass, then proves the result still passes CI's gates.
+This repo is a GitHub **template**. A fresh clone still has the placeholder name everywhere: `piper` — used as the distribution name, the importable package (a directory plus many references), and the CLI command — plus the README title `Piper`. This skill turns that placeholder into the user's real project name in one reviewable pass, then proves the result still passes CI's gates.
 
-The mechanical replacement is done by a bundled script — `scripts/bootstrap.py` — because the same name appears in four spellings across code, config, docs, and the license, plus two filesystem renames. The script is deterministic and supports `--dry-run`, so you can show the plan before touching anything. **Your job in this skill is to collect good inputs, preview, run the script, and verify.** Walk the user through it; confirm before the steps that change files.
+The mechanical replacement is done by a bundled script — `scripts/bootstrap.py` — because the single `piper` token has to become **two** different forms depending on context (the dash-form distribution / CLI name in command positions, the underscore-form package name in imports and paths), plus the `Piper` title, plus one filesystem rename of the package directory. The script is deterministic, supports `--dry-run` so you can show the plan before touching anything, and hard-fails if any placeholder token survives the substitution. **Your job in this skill is to collect good inputs, preview, run the script, and verify.** Walk the user through it; confirm before the steps that change files.
 
 ## Step 1 — Preflight
 
 Confirm this is an un-bootstrapped template and the tree is clean enough to work in:
 
 1. Read the `name = "..."` line near the top of `pyproject.toml`.
-   - If it is `name = "my-project"`: this is a fresh template — continue.
-   - If it is anything else, or the `my_project/` directory is gone: it looks **already bootstrapped**. Tell the user and ask whether to proceed anyway (the script is safe to re-run but most edits will be no-ops).
+   - If it is `name = "piper"`: this is a fresh template — continue.
+   - If it is anything else, or the `piper/` directory is gone: it looks **already bootstrapped**. Tell the user and ask whether to proceed anyway (the script is safe to re-run but most edits will be no-ops).
 2. Run `git status --short`. If the tree is dirty, mention it — bootstrap will add edits and renames on top, and the user asked for changes to be left **unstaged** for their own review, so a noisy starting point is worth flagging.
 
 ## Step 2 — Collect the project details
@@ -29,18 +29,17 @@ Ask the user for the following in one consolidated message. Lead with the packag
 
 **Optional** (let them skip any):
 - **Author** — fills the commented-out `authors = [...]` line in `pyproject.toml`. Ask for **both name and email**; if the user offers only one, explicitly ask for the other (an email with no name is a common omission — confirm the name rather than inventing one or silently pulling it from `git config`).
-- **GitHub repository URL** — e.g. `https://github.com/acme/invoice-extractor`. Replaces the `yourusername/my-project` Repository URL and the README clone URLs.
+- **GitHub repository URL** — e.g. `https://github.com/acme/invoice-extractor`. Replaces the `yourusername/piper` Repository URL and the README clone URLs.
 - **License** — the template ships **MIT**. Ask which license the user wants, because switching type (not just the holder) touches three places — the `LICENSE` body, `license = "..."` in `pyproject.toml`, and the README license line — and the script handles all three so you don't have to edit them by hand. Offer:
   - **Keep MIT** (default) — pass `--license-holder` (and optionally `--license-year`) to refresh the copyright line; the MIT body stays.
   - **Proprietary / all rights reserved** — the script rewrites `LICENSE` to an "all rights reserved" notice and sets `license = "LicenseRef-Proprietary"`. Proprietary has **no SPDX id**, and `uv lock --locked` (CI) validates that field, so the `LicenseRef-` form is required — the script uses it automatically. Collect the copyright holder.
   - **Other SPDX license** (e.g. `Apache-2.0`) — the script sets the `license =` field and README label and writes a `LICENSE` **stub**; warn the user they must paste the full license text in themselves (the script can't author arbitrary license bodies).
   - **Copyright holder + year** — collect the holder for any non-default choice; the year **defaults to the current year** (the script reads the system clock — don't hardcode or assume it) and can be overridden with `--license-year`.
 
-Derive and show the four name forms so the user can sanity-check before anything runs:
-- distribution (dashes): package with `_`→`-` (e.g. `invoice-extractor`) — override-able
-- package (underscores): as given
-- title: as given
-- test class: `Test` + CamelCase of the package (e.g. `TestInvoiceExtractor`)
+Derive and show the three name forms so the user can sanity-check before anything runs:
+- distribution (dashes): package with `_`→`-` (e.g. `invoice-extractor`) — override-able; this is also the CLI command name
+- package (underscores): as given — the importable package and the form used in imports/paths
+- title: as given — the README H1
 
 If the user gives a title but no package name, slugify the title to underscores for the default package name and confirm it.
 
@@ -66,13 +65,13 @@ python .claude/skills/bootstrap/scripts/bootstrap.py \
 
 Pass `--clean` because the user opted to strip the template-only scaffolding (the README "Use this template / Next steps" block; the bootstrap skill itself is removed separately in Step 6). Omit it only if the user changed their mind and wants the template block kept.
 
-The dry run prints the renames and the list of files that would be edited. Present that summary and **get explicit confirmation** before the real run. Only pass `--dist` if the user wants a distribution name that isn't just the package with dashes.
+The dry run prints the package-directory rename and the list of files that would be edited. Present that summary and **get explicit confirmation** before the real run. Only pass `--dist` if the user wants a distribution name that isn't just the package with dashes.
 
 ## Step 4 — Run the replacement
 
 Re-run the exact same command **without** `--dry-run`. The script:
-- renames `my_project/` → `<package>/` and `tests/e2e/test_my_project.py` → `tests/e2e/test_<package>.py` (via `git mv`, so history follows)
-- substitutes all four name spellings across `pyproject.toml`, `README.md`, `CLAUDE.md`, the package's `.py`/`.mthds` files, and the tests
+- renames `piper/` → `<package>/` (via `git mv`, so history follows). The e2e test file is named after its demo (`tests/e2e/test_extract_entities.py`), not the project, so nothing in `tests/` is renamed — only its contents are edited.
+- substitutes the name across `pyproject.toml`, `README.md`, `CLAUDE.md`, the package's `.py`/`.mthds` files, and the tests — using context-aware rules: the dash dist form in CLI-command / distribution positions, the underscore package form in imports and paths, the title in prose. `pyproject.toml` is handled with targeted per-key edits (its package-list arrays need the package form in a bare-string position). It then asserts no placeholder token survived, and aborts with the offending locations if one did.
 - fills in description, and (if given) author, repo URL
 - applies the license choice in all three places: the `LICENSE` body, `license = "..."` in `pyproject.toml`, and the README license line
 - strips the README template block
@@ -107,8 +106,8 @@ rm -rf .claude/skills/bootstrap
 Use a plain `rm` (not `git rm`) so the deletion stays unstaged, like the other content changes.
 
 Finally, give the user a short summary:
-- the four name forms that were applied, and the license that was set
-- that the package directory and e2e test file were renamed
+- the three name forms that were applied, and the license that was set
+- that the package directory was renamed
 - that `uv.lock` was regenerated and `make agent-check` / `make agent-test` pass
 - that **nothing is committed**; the renames are staged (`R`) and the content edits are unstaged (`M`) — they should review with `git status` and `git diff`, then commit (a single `git add -A && git commit` captures everything)
 - a nudge to skim the new `README.md` and write real project content, and to update `CLAUDE.md` if the project's specifics have changed

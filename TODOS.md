@@ -28,17 +28,17 @@ This repo is a GitHub **template** (`pipelex-starter-python`): a Python CLI star
 
 Goal: every placeholder occurrence in the template becomes `piper` (or `Piper` for the title), the tree passes all checks, and the CLI answers to `uv run piper …`.
 
-- [ ] `git mv my_project piper` (package dir; history follows).
-- [ ] `git mv tests/e2e/test_my_project.py tests/e2e/test_extract_entities.py` (drift fix — decouples the test file from the project name).
-- [ ] `pyproject.toml`: `[project] name`, `[project.scripts]` entry (`piper = "piper.cli:app"`), hatch `packages`, `[tool.hatch.build] package data` key, `[tool.mypy] packages`, `[tool.pyright] include`, and the placeholder `Repository` URL (`yourusername/my-project` → `yourusername/piper`). Grep the file rather than trusting this list.
-- [ ] All imports/references in `piper/*.py`, `piper/examples/*.py`, and `tests/**` (unit, integration, e2e).
-- [ ] `README.md`: token swap only in this phase (H1 → `# Piper ⚡️`, adjust the *"Replace …"* italic line, `my-project` → `piper` everywhere). The real prose rewrite is Phase 3.
-- [ ] `CLAUDE.md` (repo): update the Architecture section's `my-project` CLI / `my_project/` references.
-- [ ] Delete the untracked derived `my_project.egg-info/` directory (it regenerates under the new name).
-- [ ] `CHANGELOG.md`: leave historical entries' `my_project` references untouched (they describe past versions); the new entry comes in Phase 5.
-- [ ] Grep the workspace root (`../CLAUDE.md`, `../docs/workspace-overview.md`) for stale `my-project` references to this repo; fix if any (separate repo — separate commit there if needed).
-- [ ] `make li` — regenerate `uv.lock` for the new distribution name (CI's `package-check.yml` runs `uv lock --locked`).
-- [ ] Final sweep: `grep -rn "my-project\|my_project\|My Project\|MyProject" --exclude-dir=.venv --exclude-dir=.git --exclude=uv.lock --exclude=CHANGELOG.md .` must return only the bootstrap skill files (rewritten in Phase 2) until Phase 2 lands, then nothing.
+- [x] `git mv my_project piper` (package dir; history follows).
+- [x] `git mv tests/e2e/test_my_project.py tests/e2e/test_extract_entities.py` (drift fix — decouples the test file from the project name).
+- [x] `pyproject.toml`: `[project] name`, `[project.scripts]` entry (`piper = "piper.cli:app"`), `packages`, package-data key, `[tool.mypy] packages`, `[tool.pyright] include`, and the placeholder `Repository` URL (`yourusername/my-project` → `yourusername/piper`). **Note:** the build backend is `[tool.setuptools]`, not hatch as the plan text guessed — the actual setuptools keys were updated.
+- [x] All imports/references in `piper/*.py`, `piper/examples/*.py`, and `tests/**` (unit, integration, e2e).
+- [x] `README.md`: token swap only in this phase (H1 → `# Piper ⚡️`, adjusted the *"Replace …"* italic line, `my-project` → `piper` everywhere). The real prose rewrite is Phase 3.
+- [x] `CLAUDE.md` (repo): updated the Architecture section's `my-project` CLI / `my_project/` references.
+- [x] Deleted the untracked derived `my_project.egg-info/` directory (it regenerates under the new name).
+- [x] `CHANGELOG.md`: left historical entries' `my_project` references untouched (they describe past versions); the new entry comes in Phase 5.
+- [x] Grepped the workspace root: only `../docs/workspace-overview.md:110` referenced this repo's `my_project/`. Fixed → `piper/`, and also corrected the same line's stale "Depends on `pipelex` (editable)" claim → "Calls the hosted Pipelex API via `pipelex-sdk`". **Left UNCOMMITTED in the separate workspace-parent repo** for separate review (`../CLAUDE.md` had no stale refs to this repo).
+- [x] `make li` — regenerated `uv.lock` (`Removed my-project v0.12.0`, `Added piper v0.12.0`).
+- [x] Final sweep: the old-token grep now returns only `TODOS.md` (this plan doc, which discusses the migration) — the bootstrap skill files were rewritten in Phase 2 and no longer carry the old tokens.
 
 ## Phase 2 — Rework the `/bootstrap` skill for the single-token placeholder
 
@@ -48,19 +48,36 @@ Goal: bootstrap still turns the template into a user's project in one determinis
 
 **Chosen approach — context-aware rules instead of global tokens:**
 
-- [ ] Update the constants: `TEMPLATE_DIST = TEMPLATE_PACKAGE = "piper"` collapses to a single `TEMPLATE_NAME = "piper"`, `TEMPLATE_TITLE = "Piper"`; delete `TEMPLATE_CAMEL` and all `Test{camel}` logic and the test-file rename logic (gone since Phase 1).
-- [ ] Replacement rules by file type:
-  - `.py` files: every `piper` → package form (imports, module paths, path strings). No dist-form occurrences exist in code.
-  - `pyproject.toml`: targeted per-key edits (extend the existing `transform_pyproject()`): `name =` → dist; `[project.scripts]` left-hand side → dist, right-hand side → package; hatch/mypy/pyright arrays → package; Repository URL already handled by `--repo-url`.
-  - `.md` files (README, CLAUDE): `piper` followed by `/` or `.` → package (project-structure block, module paths); bare `piper` (command position, prose) → dist; `Piper` → title.
-- [ ] Add a post-run hard assertion inside the script: after replacement, no `\bpiper\b` / `\bPiper\b` token may survive in any transformed file — fail loudly with the offending locations. This is the safety net that replaces the old "four distinct tokens can't collide" property.
-- [ ] Update `SKILL.md`: the placeholder-forms prose (three forms now: dist, package, title — no test class), Step 1 preflight (`name = "piper"`), Step 2 derived-forms display, Step 4 description of what the script does, and the frontmatter `description`.
-- [ ] Keep the `strip_template_block()` / `transform_readme()` hardcoded strings in sync with the Phase 3 README rewrite (they pattern-match README text like the *"Replace …"* line — if Phase 3 rewords those blocks, update the regexes in the same change; do Phases 2 and 3 with this coupling in mind).
-- [ ] **Verification (the real proof):** in a scratch clone (copy the repo to the scratchpad dir), run the updated bootstrap end-to-end with a **two-word** name (`--package invoice_extractor …`) — that exercises the dist≠package split, which is the risky path — then run `make li && make agent-check && make agent-test` inside the scratch clone. Also run a `--dry-run` with a one-word name (`acme`) and eyeball the plan.
+- [x] Updated the constants: collapsed to `TEMPLATE_NAME = "piper"`, `TEMPLATE_TITLE = "Piper"`; deleted `TEMPLATE_CAMEL`, `camel_from_package()`, the `Names.camel` field, all `Test{camel}` logic, and the test-file rename block in `run()` (gone since Phase 1).
+- [x] Replacement rules — **deviated from the plan here (plan was wrong):** the plan said ".py files: every `piper` → package form. No dist-form occurrences exist in code." **That is false** — the CLI hint strings in `cli.py`/`errors.py`/`runner.py` (e.g. `` `piper runs wait <id>` ``) name the console-script, which is the **dist** name, so they must become dash-form. Resolution: a **single context-aware char-after rule** handles `.py` **and** `.md` uniformly (`piper` before `.`/`_`/`/` → package; any other boundary → dist; `Piper` → title). This is simpler than the plan's per-filetype split and provably correct.
+  - `pyproject.toml`: targeted per-key edits in `transform_pyproject()` (a `key_edits` dict): `name =` → dist; `[project.scripts]` LHS → dist, RHS → package; setuptools `packages` + package-data key + mypy `packages` + pyright `include` → package; Repository slug → dist (or `--repo-url`). Kept off the generic char-after pass because bare `["piper"]` array strings read as command position.
+- [x] Added the post-run hard assertion (`SURVIVING_NAME_RE = \b[Pp]iper\b`). Restructured the edit loop to **transform-all → assert → write** so a leftover token aborts *before* any file is written. `\b…\b` avoids false-positives on a user name embedding the token (verified against `sandpiper`).
+- [x] Updated `SKILL.md`: frontmatter `description`, placeholder-forms prose (three forms, no test class), Step 1 preflight (`name = "piper"`), Step 2 derived-forms display, Step 4 script description, and the stale "renames"/"four forms" mentions (Steps 3/6).
+- [x] `strip_template_block()` / `transform_readme()` anchors (`### Use this template`, `*Replace "…"`) still match the current README; updated their comments `My Project`→`Piper`. **Phase 3 coupling still live:** if Phase 3 rewords those README blocks, update these anchors in the same change.
+- [x] **Verification (the real proof):** scratch clone at `scratchpad/scratch-clone` (git-init'd so the `git mv` path runs). Two-word real bootstrap (`--package invoice_extractor`, dist `invoice-extractor`) → `make li` + `make agent-check` (ruff/plxt/pyright 0 errors/mypy) + `make agent-test` **all green**; `invoice-extractor --help` works (console script is the dash form ✓). One-word (`acme`) dry-run eyeballed. Also an in-process logic check over representative `.py`/`.md`/pyproject strings — all pass.
 
 ---
 
 **CHECKPOINT 1** — rename landed and bootstrap proven. Update this file: tick the boxes, record decisions taken and any deviations, note current state (branch, commits, scratch-test result). Good handoff point for a fresh session; Phases 3–4 are independent of the mechanics above.
+
+### CHECKPOINT 1 — STATUS (reached 2026-07-07)
+
+**Done:** Phases 1 and 2 complete and verified. Ready for Phase 3.
+
+**Open-question resolutions taken this session:**
+- **Q2 Branch strategy → stacked on `feature/Parity-to-JS`** (did not merge to main first). Rationale: already on it, tree was clean, and this work builds directly on its "Complete the set of examples" commit. Still one commit ahead of `main` + this uncommitted work.
+- Q1 (Mermaid), Q3 (API key), Q4 (changelog history) are Phase 3–5 concerns — not needed for this checkpoint, left for the next session to resolve.
+
+**Key deviation (important for the record):** the plan's Phase 2 rule ".py files: every `piper` → package form; no dist-form occurrences exist in code" was **incorrect**. The user-facing CLI hint strings in `piper/cli.py`, `piper/errors.py`, `piper/runner.py` reference the console-script (dist) name. The fix was a **single context-aware char-after rule** used uniformly for `.py` and `.md` (piper before `.`/`_`/`/` → package; else → dist; `Piper` → title), with `pyproject.toml` on targeted per-key edits. Net result is cleaner than the planned per-filetype split.
+
+**Current state of the code:**
+- Branch `feature/Parity-to-JS`. **Nothing committed** (per "commit only when asked"). Staging is mixed exactly as bootstrap itself produces: package-dir + test-file renames are **staged** (`R`/`RM`, from `git mv`); content edits are **unstaged** (`M`); `TODOS.md` is staged (`A`).
+- Package is `piper/`; CLI answers to `uv run piper …`; `uv.lock` regenerated to `piper v0.12.0`.
+- `make agent-check` + `make agent-test` green on the main repo; standalone `pyright` on `bootstrap.py` clean.
+- **Cross-repo:** `../docs/workspace-overview.md` has one **uncommitted** edit in the *workspace-parent* git repo (`/Users/lchoquel/repos/Pipelex`). Commit it there separately (or drop it) — it is not part of this repo's change set. Phase 5's changelog need not mention it.
+- Scratch clone (with its own `.venv`) lives at `scratchpad/scratch-clone` — ephemeral, safe to ignore/delete.
+
+**For Phase 3 (next):** the README still has the Phase-1 token-swapped text (H1 `# Piper ⚡️`, the italic *Replace "Piper"…* line, `uv run piper …` commands). When rewording the "Use this template"/"Next steps"/italic blocks, keep `strip_template_block()`/`transform_readme()` anchors in `bootstrap.py` in sync (Phase 2 coupling).
 
 ---
 

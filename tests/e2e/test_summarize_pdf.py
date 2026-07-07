@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from my_project.examples.summarize_pdf import BUNDLE_PATH, PIPE_CODE, parse
-from my_project.file_input import build_document_input
-from my_project.runner import run_durable_attended
+from piper.examples.summarize_pdf import BUNDLE_PATH, PIPE_CODE, parse
+from piper.file_input import build_document_input
+from piper.runner import run_durable_attended
 
 SAMPLE_PDF = Path(__file__).parents[2] / "samples" / "sample-invoice.pdf"
 

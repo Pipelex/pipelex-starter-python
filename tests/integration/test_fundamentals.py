@@ -3,9 +3,9 @@ from pathlib import Path
 import pytest
 from pipelex_sdk.client import PipelexAPIClient
 
-from my_project.examples.extract_entities import BUNDLE_PATH as EXTRACT_ENTITIES_BUNDLE
-from my_project.examples.generate_image import BUNDLE_PATH as GENERATE_IMAGE_BUNDLE
-from my_project.examples.summarize_pdf import BUNDLE_PATH as SUMMARIZE_PDF_BUNDLE
+from piper.examples.extract_entities import BUNDLE_PATH as EXTRACT_ENTITIES_BUNDLE
+from piper.examples.generate_image import BUNDLE_PATH as GENERATE_IMAGE_BUNDLE
+from piper.examples.summarize_pdf import BUNDLE_PATH as SUMMARIZE_PDF_BUNDLE
 
 BUNDLE_PATHS = [EXTRACT_ENTITIES_BUNDLE, SUMMARIZE_PDF_BUNDLE, GENERATE_IMAGE_BUNDLE]
 

@@ -1,10 +1,10 @@
-# My Project ⚡️
+# Piper ⚡️
 
-*Replace "My Project" with your actual project name*
+*Replace "Piper" with your actual project name*
 
 A minimal Python CLI starter that calls the [Pipelex](https://pipelex.com) API via the [`pipelex-sdk`](https://pypi.org/project/pipelex-sdk/) SDK to run AI methods (`.mthds` bundles) — no local Pipelex runtime required.
 
-It ships three demo methods, each exposed as a `my-project` CLI command:
+It ships three demo methods, each exposed as a `piper` CLI command:
 
 - **`extract-entities`** — given a piece of text, pull out the people, organizations, and dates it mentions.
 - **`summarize-pdf`** — given a document (PDF), produce a title, document type, and key points. Shows how to feed a *file* to a pipe.
@@ -18,8 +18,8 @@ This is a template repository: don't clone it, click the green `Use this templat
 Once you've created your repository from it, clone it and follow the instructions below.
 
 **Next steps after creating from template** (or later when you feel like it)
-1. In `pyproject.toml`, replace "my-project" with your project name in the header, then replace "my_project" with your package name (using underscores) in `[tool.mypy]` `packages` and `[tool.pyright]` `include`.
-2. Rename the `my_project/` directory to your package name (use underscores).
+1. In `pyproject.toml`, replace "piper" with your project name in the header, then replace "piper" with your package name (using underscores) in `[tool.mypy]` `packages` and `[tool.pyright]` `include`.
+2. Rename the `piper/` directory to your package name (use underscores).
 3. Update this README.md with your project details.
 4. Update the package imports in your code as needed.
 
@@ -37,16 +37,16 @@ cp .env.example .env
 # edit .env and set PIPELEX_API_KEY (and PIPELEX_BASE_URL if self-hosting)
 
 make install                       # create the venv and install deps with uv
-uv run my-project extract-entities "Alice from Acme met Bob on May 3rd, 2026."
+uv run piper extract-entities "Alice from Acme met Bob on May 3rd, 2026."
 ```
 
-That prints the extracted people, organizations, and dates as JSON. (`uv run` finds the project's venv; activate it with `source .venv/bin/activate` if you'd rather drop the prefix and just call `my-project ...`.)
+That prints the extracted people, organizations, and dates as JSON. (`uv run` finds the project's venv; activate it with `source .venv/bin/activate` if you'd rather drop the prefix and just call `piper ...`.)
 
 ## Project structure
 
 ```
-my_project/
-  cli.py                         # the `my-project` Typer CLI (console-script entry point)
+piper/
+  cli.py                         # the `piper` Typer CLI (console-script entry point)
   runner.py                      # execution-mode dispatch: blocking / durable attended / detached
   errors.py                      # maps SDK errors to CLI messages + hints
   file_input.py                  # encode a local file into a Pipelex Document input envelope
@@ -69,17 +69,17 @@ tests/
 
 ## How it works
 
-`my-project extract-entities "<text>"`:
+`piper extract-entities "<text>"`:
 
 1. Reads the `.mthds` bundle from disk (`extract_entities.BUNDLE_PATH`) and constructs a `PipelexAPIClient`, which picks up `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` from the environment.
 2. Runs the pipe against the API in one of **two execution modes** (`--mode`, env var `PIPELEX_EXECUTION_MODE`):
-   - **durable** (default) — `client.start()` then poll the run to completion (`client.wait_for_result`). Survives the hosted gateway's ~30s synchronous cap, so long runs succeed; the run id is printed first, so a Ctrl-C leaves it executing server-side and you can resume with `my-project runs wait <id>`.
+   - **durable** (default) — `client.start()` then poll the run to completion (`client.wait_for_result`). Survives the hosted gateway's ~30s synchronous cap, so long runs succeed; the run id is printed first, so a Ctrl-C leaves it executing server-side and you can resume with `piper runs wait <id>`.
    - **blocking** — a single `client.execute()` call. Simpler, but behind the hosted gateway a run over ~30s is cut off and surfaces a clear timeout error pointing you at durable mode.
 3. Reads the resolved main output — the SDK exposes `results.main_stuff` on both modes — and the example's `parse()` narrower validates it into a typed `ExtractedEntities` model, printed as JSON.
 
 The `.mthds` bundle is sent to the API as content (`mthds_contents`), so nothing about the method needs to live in the runtime — edit `methods/extract-entities/main.mthds` and re-run.
 
-`my_project/runner.py` deliberately branches on the mode explicitly rather than calling the SDK's `start_and_wait()` self-healing one-liner (the production shortcut when you don't care which mode) — teaching the difference between the two paths is the point of this starter. Pass `--detach` (durable only) to start a run and return immediately, then pick it back up later with `my-project runs status|result|wait <id>`.
+`piper/runner.py` deliberately branches on the mode explicitly rather than calling the SDK's `start_and_wait()` self-healing one-liner (the production shortcut when you don't care which mode) — teaching the difference between the two paths is the point of this starter. Pass `--detach` (durable only) to start a run and return immediately, then pick it back up later with `piper runs status|result|wait <id>`.
 
 The other two examples run through the exact same dispatch and lifecycle — they only differ in their input and output shapes:
 
@@ -89,13 +89,13 @@ The other two examples run through the exact same dispatch and lifecycle — the
 ## Useful commands
 
 ```bash
-uv run my-project extract-entities "Alice from Acme met Bob on May 3rd, 2026."  # text → entities
-uv run my-project extract-entities --file notes.txt          # read the input text from a file
-uv run my-project summarize-pdf samples/sample-invoice.pdf   # document → { title, doc_type, key_points }
-uv run my-project generate-image "a fox reading under a tree"  # prompt → image (use durable, the default)
-uv run my-project generate-image "…" --mode blocking         # watch it hit the ~30s cap with a timeout hint
-uv run my-project extract-entities "…" --detach              # start a durable run, print its id, return
-uv run my-project runs wait <run-id>                         # resume a detached run to completion (also: runs status / runs result)
+uv run piper extract-entities "Alice from Acme met Bob on May 3rd, 2026."  # text → entities
+uv run piper extract-entities --file notes.txt          # read the input text from a file
+uv run piper summarize-pdf samples/sample-invoice.pdf   # document → { title, doc_type, key_points }
+uv run piper generate-image "a fox reading under a tree"  # prompt → image (use durable, the default)
+uv run piper generate-image "…" --mode blocking         # watch it hit the ~30s cap with a timeout hint
+uv run piper extract-entities "…" --detach              # start a durable run, print its id, return
+uv run piper runs wait <run-id>                         # resume a detached run to completion (also: runs status / runs result)
 make validate     # lint/validate the .mthds bundles with plxt (offline)
 make agent-check  # fix-imports + format + lint + pyright + mypy
 make agent-test   # run the offline test suite (silent on success)

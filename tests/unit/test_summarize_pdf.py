@@ -2,7 +2,7 @@ import pytest
 from pipelex_sdk.runs import RunResults
 from pydantic import ValidationError
 
-from my_project.examples.summarize_pdf import parse
+from piper.examples.summarize_pdf import parse
 
 SUMMARY_CONTENT = {
     "title": "Q3 Financial Report",

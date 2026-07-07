@@ -8,7 +8,7 @@ from pipelex_sdk.errors import (
 )
 from pipelex_sdk.runs import RunStatus
 
-from my_project.errors import present_error
+from piper.errors import present_error
 
 
 def _http_status_error(status_code: int) -> httpx.HTTPStatusError:

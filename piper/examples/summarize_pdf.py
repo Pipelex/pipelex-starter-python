@@ -3,7 +3,7 @@
 Like `extract_entities`, this is a "copy me" unit: a bundle path, a Pydantic
 model mirroring the output concept, and a `parse` narrower. What it adds is a
 *file* input — the CLI passes a `Document` envelope built by
-`my_project.file_input.build_document_input`, so this is the example that shows
+`piper.file_input.build_document_input`, so this is the example that shows
 how to feed a PDF (or any document) to a pipe.
 """
 
