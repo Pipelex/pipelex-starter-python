@@ -66,12 +66,12 @@ def present_error(exc: PipelineRequestError | httpx.HTTPStatusError) -> ErrorPre
     if isinstance(exc, RunFailedError):
         return ErrorPresentation(
             message=f"Run {exc.run_id} ended with status {exc.status}: {exc}",
-            hint=f"Inspect it with `my-project runs status {exc.run_id}`.",
+            hint=f"Inspect it with `piper runs status {exc.run_id}`.",
         )
     if isinstance(exc, RunTimeoutError):
         return ErrorPresentation(
             message=f"Gave up waiting for run {exc.run_id} after {exc.timeout_seconds:.0f}s — the run is still executing server-side.",
-            hint=f"Resume waiting with `my-project runs wait {exc.run_id}`.",
+            hint=f"Resume waiting with `piper runs wait {exc.run_id}`.",
         )
     return ErrorPresentation(message=str(exc), hint=None)
 

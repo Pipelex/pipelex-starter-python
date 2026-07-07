@@ -1,7 +1,7 @@
 import pytest
 
-from my_project.examples.extract_entities import BUNDLE_PATH, PIPE_CODE, parse
-from my_project.runner import run_blocking, run_durable_attended
+from piper.examples.extract_entities import BUNDLE_PATH, PIPE_CODE, parse
+from piper.runner import run_blocking, run_durable_attended
 
 SAMPLE_TEXT = (
     "Marie Curie joined the University of Paris in 1906, two years after Pierre Curie won recognition from the Royal Swedish Academy of Sciences."

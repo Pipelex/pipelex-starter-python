@@ -1,5 +1,5 @@
 [project]
-name = "my-project"
+name = "piper"
 version = "0.12.0"
 description = "Replace this with your project description"
 # authors = [{ name = "Your Name", email = "your.email@example.com" }]
@@ -23,14 +23,14 @@ dependencies = [
 ]
 
 [project.scripts]
-my-project = "my_project.cli:app"
+piper = "piper.cli:app"
 
 [tool.setuptools]
-packages = ["my_project", "my_project.examples"]
+packages = ["piper", "piper.examples"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-my_project = ["py.typed", "methods/*/main.mthds"]
+piper = ["py.typed", "methods/*/main.mthds"]
 
 [project.optional-dependencies]
 dev = [
@@ -46,7 +46,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://pipelex.com"
-Repository = "https://github.com/yourusername/my-project" # Replace with your repository URL
+Repository = "https://github.com/yourusername/piper" # Replace with your repository URL
 Documentation = "https://docs.pipelex.com/"
 
 [build-system]
@@ -57,7 +57,7 @@ build-backend = "setuptools.build_meta"
 required-version = ">=0.7.2"
 
 [tool.mypy]
-packages = ["my_project"]
+packages = ["piper"]
 check_untyped_defs = true
 exclude = "^.*\\.venv/.*$"
 mypy_path = "."
@@ -70,7 +70,7 @@ warn_unused_configs = true
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.11"
-include = ["my_project", "tests"]
+include = ["piper", "tests"]
 analyzeUnannotatedFunctions = true
 deprecateTypingAliases = false
 disableBytesTypePromotions = true

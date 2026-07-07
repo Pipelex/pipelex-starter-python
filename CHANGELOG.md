@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- **Breaking:** renamed the starter's placeholder project from `my-project` / `my_project` / `My Project` to `piper` / `Piper`. The console command is now `uv run piper ...`, the template package is `piper/`, `pyproject.toml` points at `piper.cli:app`, and the e2e extract-entities test file no longer carries the project placeholder in its name.
+- **Reworked `/bootstrap` for the single-token placeholder.** It now derives distribution, package, and title forms from `piper`, applies context-aware replacements for command vs import/path positions, edits `pyproject.toml` by key, and aborts before writing if any placeholder tokens survive.
+- **Overhauled the README DevX.** The quick start now explains `uv run` before the first command, shows real expected output, groups the demos around copy-pasteable commands, explains durable vs blocking execution, and adds Mermaid diagrams for hosted-run flow and execution modes.
+- **Added demo methods so the starter matches the JS starter.** `summarize-pdf` summarizes a document (PDF) into `{ title, doc_type, key_points }` and demonstrates a *file* input: `piper/file_input.build_document_input()` encodes a local file as a base64 `data:` URL wrapped in a `Document` envelope. `generate-image` generates an image from a text prompt and is the slow case that overruns the hosted ~30s blocking cap, making the durable-vs-blocking split concrete. Each is a self-contained "copy me" module under `piper/examples/` with a matching `main.mthds` bundle and its own unit + e2e tests. Ships `samples/sample-invoice.pdf` to try `summarize-pdf` on.
+
 ## [v0.12.0] - 2026-07-06
 
 - **Breaking:** dropped Python 3.10 support. `pipelex-sdk` 0.4.0 no longer supports 3.10, so the starter now requires Python 3.11+ (`requires-python = ">=3.11,<3.15"`). Removed the `Python :: 3.10` classifier and dropped 3.10 from the CI lint/test matrices.
