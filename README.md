@@ -149,7 +149,9 @@ flowchart TD
 
 1. **Read the bundle.** `piper` reads `methods/extract-entities/main.mthds` from disk and constructs a `PipelexAPIClient`, which picks up `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` from the environment.
 2. **Run it on the API.** The bundle is sent as *content* (`mthds_contents`), so nothing method-specific needs to live in the runtime — edit the `.mthds` file and re-run, no redeploy.
-3. **Narrow the result.** The SDK resolves `results.main_stuff`; the example's `parse()` validates it into a typed `ExtractedEntities` model, printed as JSON.
+3. **Narrow the result.** The SDK resolves `results.main_stuff`; the example's `parse()` validates it into the typed `ExtractedEntities` model, printed as JSON.
+
+The typed models are **not hand-written**: they are generated from the `.mthds` bundles by `pipelex codegen` into `piper/generated/` (stamped, with a `codegen.lock` per method). Edit a bundle → `make codegen` regenerates the models and input templates → `make codegen-check` verifies offline that nothing is stale or hand-edited. See [docs/codegen.md](docs/codegen.md).
 
 The other demos run through the exact same path — they differ only in their inputs and output shapes. `summarize-pdf` sends a `Document` envelope (`file_input.build_document_input()` base64-encodes the file into a `data:` URL); `generate-image` returns the built-in `Image` content.
 
@@ -230,14 +232,18 @@ piper/
   runner.py                      # execution-mode dispatch: blocking / durable attended / detached
   errors.py                      # maps SDK errors to CLI messages + hints
   file_input.py                  # encode a local file into a Pipelex Document input envelope
-  examples/                      # one "copy me" unit per demo: bundle path, output model, parse()
+  examples/                      # one "copy me" unit per demo: bundle path + parse() over the generated model
     extract_entities.py          #   text → { people, orgs, dates }
     summarize_pdf.py             #   document → { title, doc_type, key_points }
     generate_image.py            #   prompt → image
+  generated/                     # typed clients generated from the bundles (`make codegen`) — do not edit
+    extract_entities/            #   models.py (stamped) + codegen.lock
+    summarize_pdf/
+    generate_image/
   methods/                       # the method bundles (sent to the API as content)
-    extract-entities/main.mthds
-    summarize-pdf/main.mthds
-    generate-image/main.mthds
+    extract-entities/            #   main.mthds + inputs.template.json (generated runnable template)
+    summarize-pdf/
+    generate-image/
 samples/
   sample-invoice.pdf             # a document to try `summarize-pdf` on
 tests/
@@ -253,6 +259,8 @@ tests/
 uv run piper extract-entities "…" --detach   # start a durable run, print its id, return
 uv run piper runs wait <run-id>              # resume a detached run (also: runs status | runs result)
 make validate       # lint/validate the .mthds bundles with plxt (offline)
+make codegen        # regenerate the typed clients + input templates from the bundles
+make codegen-check  # verify the generated clients are current (offline, pure hashing)
 make agent-check    # fix-imports + format + lint + pyright + mypy
 make agent-test     # offline test suite (silent on success)
 make test-inference # tests that hit the API (needs a key)

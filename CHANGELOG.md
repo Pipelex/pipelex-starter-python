@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- **The typed output models are now generated from the bundles, not hand-written.** `pipelex codegen` projects each method's concepts into `piper/generated/<method>/models.py` (a stamped module plus a `codegen.lock` recording the artifact set); the `piper/examples/*.py` modules now import the generated models and keep only the bundle path, pipe code, and the `parse()` narrower. `generate-image` parses into the generated built-in `Image` model (natives are materialized into the generated client), replacing the hand-written `GeneratedImage`.
+- **New make targets:** `make codegen` regenerates the typed clients and the runnable `inputs.template.json` scaffolds beside each bundle; `make codegen-check` verifies offline (pure hashing, no network or API key) that the generated clients are current. The `pipelex` CLI is not a starter dependency — point the `PIPELEX` make variable at a pipelex install that ships `codegen`. CI wiring of `codegen-check` lands once a released pipelex ships the command.
+- **New offline smoke tests** (`tests/unit/test_generated_clients.py`): the generated modules import, carry the stamp + lock, round-trip their serialization, and each committed input template names exactly the inputs the CLI dispatches.
+- `piper/generated` is excluded from ruff (reformatting generated files would trip the drift check) and remains fully type-checked; documented the whole flow in `docs/codegen.md`.
+
 ## [v0.13.0] - 2026-07-07
 
 - **Breaking:** renamed the starter's placeholder project from `my-project` / `my_project` / `My Project` to `piper` / `Piper`. The console command is now `uv run piper ...`, the template package is `piper/`, `pyproject.toml` points at `piper.cli:app`, and the e2e extract-entities test file no longer carries the project placeholder in its name.

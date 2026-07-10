@@ -25,6 +25,8 @@ Run specific tests (local only): `make tp TEST=test_function_name`
 - `make li` - Lock + install
 - `make cleanderived` - Remove caches/compiled files (useful when linters get confused)
 - `make validate` / `make v` - Lint/validate the `.mthds` bundle with plxt (offline)
+- `make codegen` - Regenerate the typed clients + input templates from the `.mthds` methods (needs the `pipelex` CLI — see below)
+- `make codegen-check` - Verify generated clients are current (offline, pure hashing against each `codegen.lock`)
 - `make tb` - Quick boot test (constructs the API client, no network)
 - `make fui` - Fix unused imports only
 - `make plxt-format` - Format `.mthds`/`.toml` files with plxt
@@ -36,7 +38,8 @@ This starter calls the **hosted Pipelex API** via the `pipelex-sdk` package (`Pi
 
 - Credentials/endpoint come from `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` (see `.env.example`). `python-dotenv` loads `.env` when running the CLI or tests.
 - The `piper` CLI (`piper/cli.py`) is a Typer app; `piper/runner.py` dispatches each run by execution mode — `blocking` (`client.execute`), durable attended (`client.start` + `client.wait_for_result`), and durable detached (`client.start` only, resumed via `piper runs status|result|wait <id>`). It branches on mode explicitly rather than using the SDK's `start_and_wait` self-healing one-liner, because teaching the mode difference is the point.
-- The SDK resolves the main output on both modes: `client.execute` returns a `PipelexExecuteResult` and the durable path a `RunResults`, both exposing a resolved `.main_stuff` (a completed run with no main stuff raises `MissingMainStuffError`). Per-example narrowing lives in `piper/examples/`, one "copy me" module per demo (bundle path, output model, `parse()`) — `extract_entities.parse()` validates `results.main_stuff` into a typed `ExtractedEntities` model. SDK errors are mapped to CLI-facing messages + hints in `piper/errors.py`.
+- The SDK resolves the main output on both modes: `client.execute` returns a `PipelexExecuteResult` and the durable path a `RunResults`, both exposing a resolved `.main_stuff` (a completed run with no main stuff raises `MissingMainStuffError`). Per-example narrowing lives in `piper/examples/`, one "copy me" module per demo (bundle path, pipe code, `parse()`) — `extract_entities.parse()` validates `results.main_stuff` into the typed `ExtractedEntities` model. SDK errors are mapped to CLI-facing messages + hints in `piper/errors.py`.
+- **The typed models are generated, never hand-written.** `pipelex codegen` projects each bundle's concepts into `piper/generated/<method>/models.py` (stamped, locked by a sibling `codegen.lock`); the examples import from there. Do NOT edit generated files — edit the bundle, then `make codegen` (regenerates models + `inputs.template.json` scaffolds) and `make codegen-check` (offline drift check). The `pipelex` CLI is not a dependency of this starter; point the `PIPELEX` make variable at a pipelex install that ships `codegen`. `piper/generated` is excluded from ruff (reformatting would trip the drift check) but fully type-checked. See `docs/codegen.md`.
 - Three demo commands share that dispatch: `extract-entities` (text in), `summarize-pdf` (a *file* in — `piper/file_input.build_document_input()` encodes a local file as a base64 `data:` URL wrapped in a `{"concept": "Document", "content": …}` envelope), and `generate-image` (prompt in). `generate-image` is the deliberate slow case that overruns the ~30s blocking cap, so it's how the starter demonstrates the durable-vs-blocking difference concretely. `samples/sample-invoice.pdf` is shipped for `summarize-pdf`.
 
 ## Project Structure
