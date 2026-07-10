@@ -204,6 +204,8 @@ validate: env
 
 # Regenerate the typed clients (stamped models + codegen.lock) and the runnable input
 # templates from the .mthds methods. Run after editing any main.mthds, then commit the result.
+# The method list here must stay in lockstep with piper/methods/* and the
+# packages/package-data lists in pyproject.toml.
 codegen:
 	$(call PRINT_TITLE,"Regenerating typed clients from the .mthds methods")
 	@$(PIPELEX) codegen types --target python-pydantic --output piper/generated/extract_entities piper/methods/extract-entities && \

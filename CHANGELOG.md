@@ -6,6 +6,7 @@
 - **New make targets:** `make codegen` regenerates the typed clients and the runnable `inputs.template.json` scaffolds beside each bundle; `make codegen-check` verifies offline (pure hashing, no network or API key) that the generated clients are current. The `pipelex` CLI is not a starter dependency — point the `PIPELEX` make variable at a pipelex install that ships `codegen`. CI wiring of `codegen-check` lands once a released pipelex ships the command.
 - **New offline smoke tests** (`tests/unit/test_generated_clients.py`): the generated modules import, carry the stamp + lock, round-trip their serialization, and each committed input template names exactly the inputs the CLI dispatches.
 - `piper/generated` is excluded from ruff (reformatting generated files would trip the drift check) and remains fully type-checked; documented the whole flow in `docs/codegen.md`.
+- Each `codegen.lock` is shipped as package data, so `pipelex codegen check` also works against an installed (wheel) copy, not just a git checkout.
 
 ## [v0.13.0] - 2026-07-07
 
