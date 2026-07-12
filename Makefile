@@ -26,6 +26,10 @@ USUAL_PYTEST_MARKERS := "(dry_runnable or not inference) and not (needs_output o
 # e.g. `PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen`.
 PIPELEX ?= pipelex
 
+# Every programmatic invocation goes through this: --no-logo keeps the banner out of CI logs
+# and agent context. Override PIPELEX, not this.
+PIPELEX_RUN = $(PIPELEX) --no-logo
+
 define PRINT_TITLE
     $(eval PROJECT_PART := [$(PROJECT_NAME)])
     $(eval TARGET_PART := ($@))
@@ -208,21 +212,21 @@ validate: env
 # packages/package-data lists in pyproject.toml.
 codegen:
 	$(call PRINT_TITLE,"Regenerating typed clients from the .mthds methods")
-	@$(PIPELEX) codegen types --target python-pydantic --output piper/generated/extract_entities piper/methods/extract-entities && \
-	$(PIPELEX) codegen types --target python-pydantic --output piper/generated/summarize_pdf piper/methods/summarize-pdf && \
-	$(PIPELEX) codegen types --target python-pydantic --output piper/generated/generate_image piper/methods/generate-image && \
-	$(PIPELEX) codegen inputs --output piper/methods/extract-entities/inputs.template.json piper/methods/extract-entities && \
-	$(PIPELEX) codegen inputs --output piper/methods/summarize-pdf/inputs.template.json piper/methods/summarize-pdf && \
-	$(PIPELEX) codegen inputs --output piper/methods/generate-image/inputs.template.json piper/methods/generate-image && \
+	@$(PIPELEX_RUN) codegen types --target python-pydantic --output piper/generated/extract_entities piper/methods/extract-entities && \
+	$(PIPELEX_RUN) codegen types --target python-pydantic --output piper/generated/summarize_pdf piper/methods/summarize-pdf && \
+	$(PIPELEX_RUN) codegen types --target python-pydantic --output piper/generated/generate_image piper/methods/generate-image && \
+	$(PIPELEX_RUN) codegen inputs --output piper/methods/extract-entities/inputs.template.json piper/methods/extract-entities && \
+	$(PIPELEX_RUN) codegen inputs --output piper/methods/summarize-pdf/inputs.template.json piper/methods/summarize-pdf && \
+	$(PIPELEX_RUN) codegen inputs --output piper/methods/generate-image/inputs.template.json piper/methods/generate-image && \
 	echo "Regenerated typed clients and input templates"
 
 # Offline drift check: pure hashing against each codegen.lock — no engine boot, no network,
 # no API key. Exit 0 = current, 1 = drift (stale/hand-edited), 2 = no lock.
 codegen-check:
 	$(call PRINT_TITLE,"Checking generated clients are current - offline")
-	@$(PIPELEX) codegen check piper/generated/extract_entities && \
-	$(PIPELEX) codegen check piper/generated/summarize_pdf && \
-	$(PIPELEX) codegen check piper/generated/generate_image
+	@$(PIPELEX_RUN) codegen check piper/generated/extract_entities && \
+	$(PIPELEX_RUN) codegen check piper/generated/summarize_pdf && \
+	$(PIPELEX_RUN) codegen check piper/generated/generate_image
 
 ##############################################################################################
 ############################      Cleaning                        ############################
