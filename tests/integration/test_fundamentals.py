@@ -3,11 +3,13 @@ from pathlib import Path
 import pytest
 from pipelex_sdk.client import PipelexAPIClient
 
-from piper.examples.extract_entities import BUNDLE_PATH as EXTRACT_ENTITIES_BUNDLE
-from piper.examples.generate_image import BUNDLE_PATH as GENERATE_IMAGE_BUNDLE
-from piper.examples.summarize_pdf import BUNDLE_PATH as SUMMARIZE_PDF_BUNDLE
+from piper.cli import METHODS_DIR
 
-BUNDLE_PATHS = [EXTRACT_ENTITIES_BUNDLE, SUMMARIZE_PDF_BUNDLE, GENERATE_IMAGE_BUNDLE]
+BUNDLE_PATHS = [
+    METHODS_DIR / "extract-entities" / "main.mthds",
+    METHODS_DIR / "summarize-pdf" / "main.mthds",
+    METHODS_DIR / "generate-image" / "main.mthds",
+]
 
 
 class TestFundamentals:

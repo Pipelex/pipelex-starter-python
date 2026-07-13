@@ -12,7 +12,7 @@ The typed models this starter parses run results into are **generated from the `
 
 Each `models.py` starts with a `pipelex-codegen-stamp` header recording the source crate fingerprint, engine version, projection, and a content hash. The sibling `codegen.lock` records the generated artifact set. Together they make drift detectable offline.
 
-The `piper/examples/*.py` modules import the generated models and only add the `parse()` narrower (`Model.model_validate(results.main_stuff)`), the bundle path, and the pipe code — nothing method-shaped is hand-written.
+The CLI commands in `piper/cli.py` import the generated models and only add the bundle path, the pipe code, and the narrowing line (`Model.model_validate(results.main_stuff)`) — nothing method-shaped is hand-written.
 
 ## Workflow
 

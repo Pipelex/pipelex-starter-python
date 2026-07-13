@@ -61,7 +61,7 @@ A `Run started: run_…` line shows up first (on stderr) — durable mode (the d
 
 ## Try the demos
 
-Each demo is one `piper` command backed by one "copy me" module in `piper/examples/` — a bundle path, an output model, and a `parse()` narrower. Run them straight from the template.
+Each demo is one self-contained `piper` command in `piper/cli.py` — a bundle path, a pipe code, and a typed narrowing of the result into its *generated* model. Run them straight from the template.
 
 **Extract entities** — text in, structured entities out.
 
@@ -128,8 +128,8 @@ flowchart TD
         MainStuff[/" results.main_stuff "/]:::data
     end
 
-    subgraph Output["Example output"]
-        Parse["parse() validates<br/>typed model"]:::operation
+    subgraph Output["Typed output"]
+        Parse["validate into the<br/>generated model"]:::operation
         JSON[/" JSON on stdout "/]:::terminal
     end
 
@@ -149,7 +149,7 @@ flowchart TD
 
 1. **Read the bundle.** `piper` reads `methods/extract-entities/main.mthds` from disk and constructs a `PipelexAPIClient`, which picks up `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` from the environment.
 2. **Run it on the API.** The bundle is sent as *content* (`mthds_contents`), so nothing method-specific needs to live in the runtime — edit the `.mthds` file and re-run, no redeploy.
-3. **Narrow the result.** The SDK resolves `results.main_stuff`; the example's `parse()` validates it into the typed `ExtractedEntities` model, printed as JSON.
+3. **Narrow the result.** The SDK resolves `results.main_stuff`; the command validates it into the generated `ExtractedEntities` model (`ExtractedEntities.model_validate(results.main_stuff)`), printed as JSON.
 
 The typed models are **not hand-written**: they are generated from the `.mthds` bundles by `pipelex codegen` into `piper/generated/` (stamped, with a `codegen.lock` per method). Edit a bundle → `make codegen` regenerates the models and input templates → `make codegen-check` verifies offline that nothing is stale or hand-edited. See [docs/codegen.md](docs/codegen.md).
 
@@ -232,10 +232,6 @@ piper/
   runner.py                      # execution-mode dispatch: blocking / durable attended / detached
   errors.py                      # maps SDK errors to CLI messages + hints
   file_input.py                  # encode a local file into a Pipelex Document input envelope
-  examples/                      # one "copy me" unit per demo: bundle path + parse() over the generated model
-    extract_entities.py          #   text → { people, orgs, dates }
-    summarize_pdf.py             #   document → { title, doc_type, key_points }
-    generate_image.py            #   prompt → image
   generated/                     # typed clients generated from the bundles (`make codegen`) — do not edit
     extract_entities/            #   models.py (stamped) + codegen.lock
     summarize_pdf/
@@ -247,7 +243,7 @@ piper/
 samples/
   sample-invoice.pdf             # a document to try `summarize-pdf` on
 tests/
-  unit/                          # offline CLI / example / error-mapping tests
+  unit/                          # offline CLI / error-mapping / generated-client tests
   integration/                   # offline boot/bundle checks + API validate (pipelex_api)
   e2e/                           # full run against the API (inference)
 .env.example                     # PIPELEX_BASE_URL + PIPELEX_API_KEY

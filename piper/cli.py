@@ -1,9 +1,11 @@
 """The `piper` CLI — demo Pipelex methods behind a Typer app.
 
-Commands stay thin: parse arguments, dispatch on execution mode via
-`piper.runner`, narrow + render via the matching `piper.examples`
-module. SDK errors are caught once per command (in `_run_cli`) and presented by
-`piper.errors`; anything unexpected crashes loudly.
+Each demo command is the self-contained "copy me" unit: it reads its bundle
+from `piper/methods/`, dispatches on execution mode via `piper.runner`, and
+narrows the run result into its *generated* output model (`piper/generated/`,
+produced from the bundles by `pipelex codegen` — nothing method-shaped is
+hand-written). SDK errors are caught once per command (in `_run_cli`) and
+presented by `piper.errors`; anything unexpected crashes loudly.
 """
 
 import asyncio
@@ -18,10 +20,10 @@ from pipelex_sdk.runs import RunResultCompleted, RunResultFailed, RunResultRunni
 from rich.console import Console
 
 from piper.errors import present_error
-from piper.examples import extract_entities as extract_entities_example
-from piper.examples import generate_image as generate_image_example
-from piper.examples import summarize_pdf as summarize_pdf_example
 from piper.file_input import build_document_input
+from piper.generated.extract_entities.models import ExtractedEntities
+from piper.generated.generate_image.models import Image
+from piper.generated.summarize_pdf.models import DocumentSummary
 from piper.runner import (
     ExecutionMode,
     fetch_run_result,
@@ -34,6 +36,8 @@ from piper.runner import (
 )
 
 ResultT = TypeVar("ResultT")
+
+METHODS_DIR = Path(__file__).parent / "methods"
 
 app = typer.Typer(no_args_is_help=True, help="Run the demo Pipelex methods through the Pipelex API.")
 runs_app = typer.Typer(no_args_is_help=True, help="Inspect and resume durable runs by id.")
@@ -61,9 +65,9 @@ def extract_entities(
 ) -> None:
     """Extract people, organizations, and dates from a piece of text."""
     input_text = _read_text_input(text=text, file=file)
-    bundle = extract_entities_example.BUNDLE_PATH.read_text()
+    bundle = (METHODS_DIR / "extract-entities" / "main.mthds").read_text()
     results = _dispatch(
-        pipe_code=extract_entities_example.PIPE_CODE,
+        pipe_code="extract_entities",
         bundle=bundle,
         inputs={"text": input_text},
         mode=mode,
@@ -71,9 +75,9 @@ def extract_entities(
     )
     if results is None:
         return
-    # Narrow into the typed model (validates the concept's shape), then print it
-    # as JSON — the same rendering `runs result` / `runs wait` give.
-    entities = extract_entities_example.parse(results)
+    # Narrow into the generated typed model (validates the concept's shape), then
+    # print it as JSON — the same rendering `runs result` / `runs wait` give.
+    entities = ExtractedEntities.model_validate(results.main_stuff)
     output_console.print_json(data=entities.model_dump())
 
 
@@ -87,9 +91,9 @@ def summarize_pdf(
     if not file.is_file():
         msg = f"No such file: {file}"
         raise typer.BadParameter(msg)
-    bundle = summarize_pdf_example.BUNDLE_PATH.read_text()
+    bundle = (METHODS_DIR / "summarize-pdf" / "main.mthds").read_text()
     results = _dispatch(
-        pipe_code=summarize_pdf_example.PIPE_CODE,
+        pipe_code="summarize_pdf",
         bundle=bundle,
         inputs={"document": build_document_input(file)},
         mode=mode,
@@ -97,7 +101,7 @@ def summarize_pdf(
     )
     if results is None:
         return
-    summary = summarize_pdf_example.parse(results)
+    summary = DocumentSummary.model_validate(results.main_stuff)
     output_console.print_json(data=summary.model_dump())
 
 
@@ -115,9 +119,9 @@ def generate_image(
     durable` (the default) to actually get an image.
     """
     image_prompt = _read_text_input(text=prompt, file=file)
-    bundle = generate_image_example.BUNDLE_PATH.read_text()
+    bundle = (METHODS_DIR / "generate-image" / "main.mthds").read_text()
     results = _dispatch(
-        pipe_code=generate_image_example.PIPE_CODE,
+        pipe_code="generate_image",
         bundle=bundle,
         inputs={"image_prompt": image_prompt},
         mode=mode,
@@ -125,7 +129,9 @@ def generate_image(
     )
     if results is None:
         return
-    image = generate_image_example.parse(results)
+    # On the hosted path the runtime returns a storage `url` (`pipelex-storage://…`)
+    # *and* a web-renderable `public_url` (a signed URL); the model keeps both.
+    image = Image.model_validate(results.main_stuff)
     output_console.print_json(data=image.model_dump())
 
 
