@@ -155,9 +155,9 @@ The typed models are **not hand-written**: they are generated from the `.mthds` 
 
 The other demos run through the exact same path — they differ only in their inputs and output shapes. `summarize-pdf` sends a `Document` envelope (`file_input.build_document_input()` base64-encodes the file into a `data:` URL); `generate-image` returns the built-in `Image` content.
 
-## Execution modes: durable vs blocking
+## Execution modes: durable vs detached vs blocking
 
-Every command takes `--mode` (env var `PIPELEX_EXECUTION_MODE`). The default is **durable**, and `generate-image` is the demo that shows why:
+Every command takes `--mode` (env var `PIPELEX_EXECUTION_MODE`), one of `durable`, `detached`, or `blocking`. The default is **durable**, and `generate-image` is the demo that shows why:
 
 ### Blocking: finishes under the cap
 
@@ -185,15 +185,15 @@ sequenceDiagram
     API--xU: PipelineExecuteTimeoutError + durable-mode hint
 ```
 
-### Durable attended: wait here
+### Durable: wait here
 
-Durable attended mode starts a server-side run, prints the run id first, then keeps this terminal polling until the result is ready:
+Durable mode starts a server-side run, prints the run id first, then keeps this terminal polling until the result is ready:
 
 ```mermaid
 sequenceDiagram
     participant U as You (piper CLI)
     participant API as Hosted Pipelex API
-    Note over U,API: durable attended: survives the cap
+    Note over U,API: durable: survives the cap
     U->>API: start(pipe, bundle, inputs)
     API-->>U: run id (printed first, so Ctrl-C is safe)
     loop poll every few seconds
@@ -202,7 +202,7 @@ sequenceDiagram
     API-->>U: result
 ```
 
-### Durable detached: collect later
+### Detached: collect later
 
 Detached mode starts the same durable server-side run, then exits immediately so you can resume from any terminal:
 
@@ -210,7 +210,7 @@ Detached mode starts the same durable server-side run, then exits immediately so
 sequenceDiagram
     participant U as You (piper CLI)
     participant API as Hosted Pipelex API
-    Note over U,API: durable detached: start now, collect later
+    Note over U,API: detached: start now, collect later
     U->>API: start(pipe, bundle, inputs)
     API-->>U: run id, then exit
     Note over U,API: later, any terminal
@@ -218,9 +218,11 @@ sequenceDiagram
     API-->>U: result
 ```
 
-- **blocking** — one `client.execute()` call. Simplest, but behind the hosted gateway a run over ~30s is cut off with a `PipelineExecuteTimeoutError` that points you at durable mode.
-- **durable attended** (default) — `client.start()` then poll to completion (`client.wait_for_result`). Survives the cap. The run id is printed *before* polling, so a Ctrl-C leaves the run executing server-side and you can resume it with `piper runs wait <id>`.
-- **durable detached** (`--detach`) — `client.start()` and return immediately. Pick the run back up later — even from another terminal — with `piper runs status|result|wait <id>`.
+- **blocking** (`--mode blocking`) — one `client.execute()` call. Simplest, but behind the hosted gateway a run over ~30s is cut off with a `PipelineExecuteTimeoutError` that points you at durable mode.
+- **durable** (`--mode durable`, the default) — `client.start()` then poll to completion (`client.wait_for_result`). Survives the cap. The run id is printed *before* polling, so a Ctrl-C leaves the run executing server-side and you can resume it with `piper runs wait <id>`.
+- **detached** (`--mode detached`) — the same durable `client.start()`, but return immediately instead of polling. Pick the run back up later — even from another terminal — with `piper runs status|result|wait <id>`.
+
+Detached is durable too; the only difference is who waits. That is why it is a third value of `--mode` rather than a `--detach` flag layered on top of it: the three modes are mutually exclusive, so there is no way to ask for an incoherent combination.
 
 `piper/runner.py` branches on the mode explicitly instead of calling the SDK's `start_and_wait()` self-healing one-liner (the production shortcut when you don't care which path runs) — teaching the difference is the point of this starter.
 
@@ -229,7 +231,7 @@ sequenceDiagram
 ```
 piper/
   cli.py                         # the `piper` Typer CLI (console-script entry point)
-  runner.py                      # execution-mode dispatch: blocking / durable attended / detached
+  runner.py                      # execution-mode dispatch: blocking / durable / detached
   errors.py                      # maps SDK errors to CLI messages + hints
   file_input.py                  # encode a local file into a Pipelex Document input envelope
   generated/                     # typed clients generated from the bundles (`make codegen`) — do not edit
@@ -252,8 +254,8 @@ tests/
 ## Useful commands
 
 ```bash
-uv run piper extract-entities "…" --detach   # start a durable run, print its id, return
-uv run piper runs wait <run-id>              # resume a detached run (also: runs status | runs result)
+uv run piper extract-entities "…" --mode detached   # start a durable run, print its id, return
+uv run piper runs wait <run-id>                     # resume a detached run (also: runs status | runs result)
 make validate       # lint/validate the .mthds bundles with plxt (offline)
 make codegen        # regenerate the typed clients + input templates from the bundles
 make codegen-check  # verify the generated clients are current (offline, pure hashing)

@@ -40,10 +40,6 @@ class TestCli:
         result = runner.invoke(app, ["extract-entities", "some text", "--mode", "bogus"])
         assert result.exit_code != 0
 
-    def test_extract_entities_rejects_blocking_detach(self):
-        result = runner.invoke(app, ["extract-entities", "some text", "--mode", "blocking", "--detach"])
-        assert result.exit_code != 0
-
     def test_default_mode_is_durable(self, mocker: MockerFixture):
         durable_mock = mocker.patch("piper.cli.run_durable_attended", return_value=RunResults(pipeline_run_id="run-1", main_stuff=ENTITIES_CONTENT))
         result = runner.invoke(app, ["extract-entities", "some text"])
@@ -66,10 +62,11 @@ class TestCli:
         assert durable_mock.await_args is not None
         assert durable_mock.await_args.kwargs["inputs"] == {"text": "text from a file"}
 
-    def test_detach_prints_run_id(self, mocker: MockerFixture):
-        mocker.patch("piper.cli.start_detached", return_value="run-abc123")
-        result = runner.invoke(app, ["extract-entities", "some text", "--detach"])
+    def test_detached_mode_prints_run_id(self, mocker: MockerFixture):
+        detached_mock = mocker.patch("piper.cli.start_detached", return_value="run-abc123")
+        result = runner.invoke(app, ["extract-entities", "some text", "--mode", "detached"])
         assert result.exit_code == 0
+        detached_mock.assert_awaited_once()
         assert "run-abc123" in result.output
 
     def test_summarize_pdf_requires_file(self):

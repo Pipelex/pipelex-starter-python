@@ -1,12 +1,12 @@
-"""Execution-mode dispatch for the CLI: blocking, durable attended, durable detached.
+"""Execution-mode dispatch for the CLI — three modes, one `ExecutionMode` value each.
 
 Each function opens its own `PipelexAPIClient` (credentials come from
 `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`), demonstrates exactly one SDK lifecycle
 call, and renders progress with Rich on stderr — stdout stays clean for results.
 
-- blocking          -> `client.execute`          (one call, dies at the hosted ~30s cap)
-- durable attended  -> `client.start` + `client.wait_for_result` (survives anything)
-- durable detached  -> `client.start` only       (come back later with `runs ...`)
+- blocking  -> `client.execute`                            (one call, dies at the hosted ~30s cap)
+- durable   -> `client.start` + `client.wait_for_result`   (durable, attended: survives anything)
+- detached  -> `client.start` only                         (durable, unattended: come back later with `runs ...`)
 
 The SDK also offers `start_and_wait`, a self-healing one-liner that picks the
 right path by itself — this starter branches explicitly because teaching the
@@ -14,7 +14,7 @@ difference is the point.
 """
 
 import asyncio
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pipelex_sdk.client import PipelexAPIClient
@@ -25,11 +25,12 @@ from rich.console import Console
 progress_console = Console(stderr=True)
 
 
-class ExecutionMode(str, Enum):
-    """How a run is executed against the API — see the module docstring."""
+class ExecutionMode(StrEnum):
+    """How a run is executed against the API — one member per lifecycle in the module docstring."""
 
     BLOCKING = "blocking"
     DURABLE = "durable"
+    DETACHED = "detached"
 
 
 async def run_blocking(*, pipe_code: str, bundle: str, inputs: dict[str, Any] | None = None) -> RunResults:

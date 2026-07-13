@@ -10,7 +10,7 @@ presented by `piper.errors`; anything unexpected crashes loudly.
 
 import asyncio
 from pathlib import Path
-from typing import Annotated, Any, Coroutine, TypeVar
+from typing import Annotated, Any, Coroutine, TypeAlias, TypeVar
 
 import httpx
 import typer
@@ -46,8 +46,14 @@ app.add_typer(runs_app, name="runs")
 # Results go to stdout (pipeable); progress/status chatter goes to stderr (see runner.py).
 output_console = Console()
 
-MODE_HELP = "How to execute the run: `durable` (start + poll, survives anything) or `blocking` (single call, ~30s cap on hosted)."
-DETACH_HELP = "Start the run and exit immediately; fetch it later with `piper runs ...` (durable mode only)."
+MODE_HELP = (
+    "How to execute the run: `durable` (start, then poll here until it is done — survives anything), "
+    "`detached` (start durably and exit; collect it later with `piper runs ...`), "
+    "or `blocking` (single call, ~30s cap on hosted)."
+)
+
+# Every demo command takes the same mode option, so it is declared once.
+ModeOption: TypeAlias = Annotated[ExecutionMode, typer.Option(envvar="PIPELEX_EXECUTION_MODE", help=MODE_HELP)]
 
 
 @app.callback()
@@ -60,8 +66,7 @@ def main() -> None:
 def extract_entities(
     text: Annotated[str | None, typer.Argument(help="The text to extract entities from.")] = None,
     file: Annotated[Path | None, typer.Option("--file", help="Read the input text from a file instead of the argument.")] = None,
-    mode: Annotated[ExecutionMode, typer.Option(envvar="PIPELEX_EXECUTION_MODE", help=MODE_HELP)] = ExecutionMode.DURABLE,
-    detach: Annotated[bool, typer.Option("--detach", help=DETACH_HELP)] = False,
+    mode: ModeOption = ExecutionMode.DURABLE,
 ) -> None:
     """Extract people, organizations, and dates from a piece of text."""
     input_text = _read_text_input(text=text, file=file)
@@ -71,7 +76,6 @@ def extract_entities(
         bundle=bundle,
         inputs={"text": input_text},
         mode=mode,
-        detach=detach,
     )
     if results is None:
         return
@@ -84,8 +88,7 @@ def extract_entities(
 @app.command(name="summarize-pdf")
 def summarize_pdf(
     file: Annotated[Path, typer.Argument(help="Path to the PDF (or other document) to summarize.")],
-    mode: Annotated[ExecutionMode, typer.Option(envvar="PIPELEX_EXECUTION_MODE", help=MODE_HELP)] = ExecutionMode.DURABLE,
-    detach: Annotated[bool, typer.Option("--detach", help=DETACH_HELP)] = False,
+    mode: ModeOption = ExecutionMode.DURABLE,
 ) -> None:
     """Summarize a document into a title, type, and key points."""
     if not file.is_file():
@@ -97,7 +100,6 @@ def summarize_pdf(
         bundle=bundle,
         inputs={"document": build_document_input(file)},
         mode=mode,
-        detach=detach,
     )
     if results is None:
         return
@@ -109,8 +111,7 @@ def summarize_pdf(
 def generate_image(
     prompt: Annotated[str | None, typer.Argument(help="The text prompt describing the image to generate.")] = None,
     file: Annotated[Path | None, typer.Option("--file", help="Read the prompt from a file instead of the argument.")] = None,
-    mode: Annotated[ExecutionMode, typer.Option(envvar="PIPELEX_EXECUTION_MODE", help=MODE_HELP)] = ExecutionMode.DURABLE,
-    detach: Annotated[bool, typer.Option("--detach", help=DETACH_HELP)] = False,
+    mode: ModeOption = ExecutionMode.DURABLE,
 ) -> None:
     """Generate an image from a text prompt.
 
@@ -125,7 +126,6 @@ def generate_image(
         bundle=bundle,
         inputs={"image_prompt": image_prompt},
         mode=mode,
-        detach=detach,
     )
     if results is None:
         return
@@ -171,24 +171,18 @@ def _read_text_input(*, text: str | None, file: Path | None) -> str:
     raise typer.BadParameter(msg)
 
 
-def _dispatch(*, pipe_code: str, bundle: str, inputs: dict[str, Any], mode: ExecutionMode, detach: bool) -> RunResults | None:
-    """Run the pipe in the requested mode; returns None when detached (id already printed)."""
-    if detach:
-        match mode:
-            case ExecutionMode.BLOCKING:
-                msg = "--detach starts a durable run; it cannot be combined with --mode blocking."
-                raise typer.BadParameter(msg)
-            case ExecutionMode.DURABLE:
-                pass
-        run_id = _run_cli(start_detached(pipe_code=pipe_code, bundle=bundle, inputs=inputs))
-        print(run_id)
-        progress_console.print(f"Run started — fetch it later with: [bold]piper runs wait {run_id}[/bold]")
-        return None
+def _dispatch(*, pipe_code: str, bundle: str, inputs: dict[str, Any], mode: ExecutionMode) -> RunResults | None:
+    """Run the pipe in the requested mode; returns None in detached mode, which has no result to print yet."""
     match mode:
         case ExecutionMode.BLOCKING:
             return _run_cli(run_blocking(pipe_code=pipe_code, bundle=bundle, inputs=inputs))
         case ExecutionMode.DURABLE:
             return _run_cli(run_durable_attended(pipe_code=pipe_code, bundle=bundle, inputs=inputs))
+        case ExecutionMode.DETACHED:
+            run_id = _run_cli(start_detached(pipe_code=pipe_code, bundle=bundle, inputs=inputs))
+            print(run_id)
+            progress_console.print(f"Run started — fetch it later with: [bold]piper runs wait {run_id}[/bold]")
+            return None
 
 
 def _run_cli(coro: Coroutine[Any, Any, ResultT]) -> ResultT:
