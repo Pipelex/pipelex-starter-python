@@ -17,7 +17,8 @@ from piper.generated.summarize_pdf.models import DocumentSummary
 
 PIPER_DIR = Path(__file__).parent.parent.parent / "piper"
 
-# method dir -> (generated package dir, the input names piper/cli.py dispatches for that method)
+# method dir -> (generated package dir, the input names every mode CLI passes for that method —
+# the three modes are symmetric on inputs, which `test_mode_symmetry.py` guards)
 METHODS = {
     "extract-entities": ("extract_entities", {"text"}),
     "summarize-pdf": ("summarize_pdf", {"document"}),
@@ -38,9 +39,9 @@ class TestGeneratedClients:
         assert 'path = "models.py"' in lock_text
 
     @pytest.mark.parametrize("method_dir", list(METHODS))
-    def test_input_template_matches_cli_dispatch(self, method_dir: str):
+    def test_input_template_matches_the_cli_inputs(self, method_dir: str):
         """The committed inputs template names exactly the inputs the CLI passes for the method —
-        a regenerated template that drifted from `piper/cli.py`'s dispatch fails here, offline.
+        a regenerated template that drifted from what `piper/<mode>/cli.py` sends fails here, offline.
         """
         expected_inputs = METHODS[method_dir][1]
         template_path = PIPER_DIR / "methods" / method_dir / "inputs.template.json"

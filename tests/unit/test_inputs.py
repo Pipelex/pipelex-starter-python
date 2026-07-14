@@ -2,11 +2,30 @@ import base64
 from pathlib import Path
 
 import pytest
+import typer
 
-from piper.file_input import build_document_input
+from piper.inputs import build_document_input, read_text_input
 
 
-class TestBuildDocumentInput:
+class TestInputs:
+    def test_read_text_input_from_argument(self):
+        assert read_text_input(text="inline text", file=None) == "inline text"
+
+    def test_read_text_input_from_file(self, tmp_path: Path):
+        input_file = tmp_path / "input.txt"
+        input_file.write_text("text from a file")
+        assert read_text_input(text=None, file=input_file) == "text from a file"
+
+    def test_read_text_input_rejects_both(self, tmp_path: Path):
+        input_file = tmp_path / "input.txt"
+        input_file.write_text("text from a file")
+        with pytest.raises(typer.BadParameter):
+            read_text_input(text="inline text", file=input_file)
+
+    def test_read_text_input_rejects_neither(self):
+        with pytest.raises(typer.BadParameter):
+            read_text_input(text=None, file=None)
+
     def test_pdf_envelope(self, tmp_path: Path):
         pdf = tmp_path / "invoice.pdf"
         payload = b"%PDF-1.4 hello"

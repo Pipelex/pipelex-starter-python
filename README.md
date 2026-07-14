@@ -8,7 +8,7 @@ It ships a handful of demo methods, each exposed as a `piper` CLI command:
 
 - **`extract-entities`** — given a piece of text, pull out the people, organizations, and dates it mentions.
 - **`summarize-pdf`** — given a document (PDF), produce a title, document type, and key points. Shows how to feed a *file* to a pipe.
-- **`generate-image`** — given a text prompt, generate an image. Being slow, it's the example that best shows the durable-vs-blocking split (image generation routinely outlives the hosted ~30s blocking cap).
+- **`generate-image`** — given a text prompt, generate an image. Being slow, it's the example that best shows the split between the execution modes (image generation routinely outlives the hosted ~30s blocking cap).
 
 Each prints its result as JSON.
 
@@ -44,7 +44,7 @@ Install the dependencies, then run your first method. `uv run` executes a comman
 
 ```bash
 make install                       # create the venv and install deps with uv
-uv run piper extract-entities "Alice from Acme met Bob on May 3rd, 2026."
+uv run piper blocking extract-entities "Alice from Acme met Bob on May 3rd, 2026."
 ```
 
 You get the extracted entities as JSON:
@@ -57,17 +57,17 @@ You get the extracted entities as JSON:
 }
 ```
 
-A `Run started: run_…` line shows up first (on stderr) — durable mode (the default) prints the run id before polling, so a long run is never lost. Prefer a bare `piper …`? Activate the venv once with `source .venv/bin/activate` and drop the `uv run` prefix.
+`blocking` is the execution mode — one call, one response. It is the first of three, and every demo runs in all three: see **Execution modes** below. Prefer a bare `piper …`? Activate the venv once with `source .venv/bin/activate` and drop the `uv run` prefix.
 
 ## Try the demos
 
-Each demo is one self-contained `piper` command in `piper/cli.py` — a bundle path, a pipe code, and a typed narrowing of the result into its *generated* model. Run them straight from the template.
+Each demo is one self-contained `piper` command — a bundle path, a pipe code, and a typed narrowing of the result into its *generated* model. Every demo exists in every execution mode; the commands below use `blocking`, the simplest one.
 
 **Extract entities** — text in, structured entities out.
 
 ```bash
-uv run piper extract-entities "Alice from Acme met Bob on May 3rd, 2026."
-uv run piper extract-entities --file notes.txt          # or read the text from a file
+uv run piper blocking extract-entities "Alice from Acme met Bob on May 3rd, 2026."
+uv run piper blocking extract-entities --file notes.txt          # or read the text from a file
 ```
 
 ```json
@@ -77,7 +77,7 @@ uv run piper extract-entities --file notes.txt          # or read the text from 
 **Summarize a PDF** — a *file* goes in; `piper` base64-encodes it into a `Document` envelope for you, so you never host the file yourself.
 
 ```bash
-uv run piper summarize-pdf samples/sample-invoice.pdf
+uv run piper blocking summarize-pdf samples/sample-invoice.pdf
 ```
 
 ```json
@@ -92,11 +92,11 @@ uv run piper summarize-pdf samples/sample-invoice.pdf
 }
 ```
 
-**Generate an image** — the slow one, and the reason durable mode exists. Image generation routinely outlives the hosted ~30s blocking cap.
+**Generate an image** — the slow one, and the reason the durable modes exist. Image generation routinely outlives the hosted ~30s blocking cap.
 
 ```bash
-uv run piper generate-image "a fox reading under a tree"                    # durable (default): waits it out
-uv run piper generate-image "a fox reading under a tree" --mode blocking    # watch it hit the ~30s cap
+uv run piper blocking generate-image "a fox reading under a tree"    # watch it hit the ~30s cap
+uv run piper attended generate-image "a fox reading under a tree"    # durable: waits it out, no cap
 ```
 
 ```json
@@ -108,16 +108,16 @@ uv run piper generate-image "a fox reading under a tree" --mode blocking    # wa
 }
 ```
 
-Open `public_url` in a browser to see the image. Run it with `--mode blocking` and you'll get a `PipelineExecuteTimeoutError` with a hint pointing you back to durable mode — that contrast is what the **Execution modes** section below is about.
+Open `public_url` in a browser to see the image. Run it under `blocking` and you'll get a `PipelineExecuteTimeoutError` with a hint pointing you at `piper attended` — that contrast is what the **Execution modes** section below is about.
 
 ## How it works
 
-`piper extract-entities "<text>"` runs entirely through the SDK — nothing about the method lives on the server:
+`piper blocking extract-entities "<text>"` runs entirely through the SDK — nothing about the method lives on the server:
 
 ```mermaid
 flowchart TD
     subgraph Local["Local starter"]
-        CLI(["piper extract-entities '…'"]):::operation
+        CLI(["piper blocking extract-entities '…'"]):::operation
         Bundle[/" .mthds bundle<br/>file on disk "/]:::data
         Read["read bundle contents"]:::operation
         Client["create PipelexAPIClient<br/>from env credentials"]:::operation
@@ -125,7 +125,7 @@ flowchart TD
 
     subgraph Hosted["Hosted Pipelex API"]
         Run["run method from submitted bundle"]:::service
-        MainStuff[/" results.main_stuff "/]:::data
+        MainStuff[/" main_stuff "/]:::data
     end
 
     subgraph Output["Typed output"]
@@ -149,51 +149,66 @@ flowchart TD
 
 1. **Read the bundle.** `piper` reads `methods/extract-entities/main.mthds` from disk and constructs a `PipelexAPIClient`, which picks up `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` from the environment.
 2. **Run it on the API.** The bundle is sent as *content* (`mthds_contents`), so nothing method-specific needs to live in the runtime — edit the `.mthds` file and re-run, no redeploy.
-3. **Narrow the result.** The SDK resolves `results.main_stuff`; the command validates it into the generated `ExtractedEntities` model (`ExtractedEntities.model_validate(results.main_stuff)`), printed as JSON.
+3. **Narrow the result.** The SDK resolves the run's `main_stuff`; the command validates it into the generated `ExtractedEntities` model (`ExtractedEntities.model_validate(main_stuff)`), printed as JSON.
 
 The typed models are **not hand-written**: they are generated from the `.mthds` bundles by `pipelex codegen` into `piper/generated/` (stamped, with a `codegen.lock` per method). Edit a bundle → `make codegen` regenerates the models and input templates → `make codegen-check` verifies offline that nothing is stale or hand-edited. See [docs/codegen.md](docs/codegen.md).
 
-The other demos run through the exact same path — they differ only in their inputs and output shapes. `summarize-pdf` sends a `Document` envelope (`file_input.build_document_input()` base64-encodes the file into a `data:` URL); `generate-image` returns the built-in `Image` content.
+The other demos run through the exact same path — they differ only in their inputs and output shapes. `summarize-pdf` sends a `Document` envelope (`inputs.build_document_input()` base64-encodes the file into a `data:` URL); `generate-image` returns the built-in `Image` content.
 
-## Execution modes: durable vs detached vs blocking
+## Execution modes: blocking, attended, detached
 
-Every command takes `--mode` (env var `PIPELEX_EXECUTION_MODE`), one of `durable`, `detached`, or `blocking`. The default is **durable**, and `generate-image` is the demo that shows why:
+**The mode is the command group, not an option.** There are three, and every demo runs in all three:
 
-### Blocking: finishes under the cap
+```bash
+uv run piper blocking  extract-entities | summarize-pdf | generate-image
+uv run piper attended  extract-entities | summarize-pdf | generate-image
+uv run piper detached  extract-entities | summarize-pdf | generate-image
+uv run piper detached  wait | status | result   <run-id>
+```
 
-Blocking mode is a single `client.execute()` call. Use it when you expect the run to finish quickly:
+Read them in that order — each one is a single self-contained file (`piper/<mode>/cli.py`) you can copy straight into your own project.
+
+### Act 1 — `blocking`: one call, one response
+
+A single `client.execute()` call. Nothing to learn, nothing to manage: you get the result in the response.
 
 ```mermaid
 sequenceDiagram
-    participant U as You (piper CLI)
+    participant U as You (piper blocking)
     participant API as Hosted Pipelex API
-    Note over U,API: blocking succeeds: one request, one response
+    Note over U,API: one request, one response
     U->>API: execute(pipe, bundle, inputs)
     API-->>U: result under ~30s
 ```
 
-### Blocking: times out
+### Act 2 — the ~30s cap, and why the other two modes exist
 
-The same blocking call fails when the hosted gateway cap is reached:
+Behind the hosted gateway, a run longer than ~30s is cut off. `generate-image` is here to show you:
 
-```mermaid
-sequenceDiagram
-    participant U as You (piper CLI)
-    participant API as Hosted Pipelex API
-    Note over U,API: blocking fails: run crosses the ~30s cap
-    U->>API: execute(pipe, bundle, inputs)
-    API--xU: PipelineExecuteTimeoutError + durable-mode hint
+```bash
+uv run piper blocking generate-image "a fox reading under a tree"   # expected to fail
 ```
 
-### Durable: wait here
+```mermaid
+sequenceDiagram
+    participant U as You (piper blocking)
+    participant API as Hosted Pipelex API
+    Note over U,API: the run crosses the ~30s cap
+    U->>API: execute(pipe, bundle, inputs)
+    API--xU: PipelineExecuteTimeoutError + "rerun with piper attended"
+```
 
-Durable mode starts a server-side run, prints the run id first, then keeps this terminal polling until the result is ready:
+Long runs need a *durable* run — one that lives server-side, behind an id, and outlives your terminal. That is what the next two modes give you. They start the very same durable run; they differ only in **who waits**.
+
+### Act 3a — `attended`: start it, wait here
+
+`client.start()` gives you a run id, then `client.wait_for_result()` polls it to completion from this terminal. No cap.
 
 ```mermaid
 sequenceDiagram
-    participant U as You (piper CLI)
+    participant U as You (piper attended)
     participant API as Hosted Pipelex API
-    Note over U,API: durable: survives the cap
+    Note over U,API: durable run, you wait for it
     U->>API: start(pipe, bundle, inputs)
     API-->>U: run id (printed first, so Ctrl-C is safe)
     loop poll every few seconds
@@ -202,38 +217,55 @@ sequenceDiagram
     API-->>U: result
 ```
 
-### Detached: collect later
+The id is printed *before* polling starts, so nothing is ever lost: Ctrl-C leaves the run executing server-side, and you pick it back up with `piper detached wait <id>` — an interrupted attended run has literally become a detached one.
 
-Detached mode starts the same durable server-side run, then exits immediately so you can resume from any terminal:
+### Act 3b — `detached`: start it, collect it later
+
+Same durable run, but `piper` exits as soon as it has the id — on stdout, so it pipes:
+
+```bash
+RUN_ID=$(uv run piper detached generate-image "a fox reading under a tree")
+uv run piper detached status $RUN_ID    # where is it now? (no waiting)
+uv run piper detached result $RUN_ID    # its result, if it is done (no waiting)
+uv run piper detached wait   $RUN_ID    # block until it is done, then print the result
+```
 
 ```mermaid
 sequenceDiagram
-    participant U as You (piper CLI)
+    participant U as You (piper detached)
     participant API as Hosted Pipelex API
-    Note over U,API: detached: start now, collect later
+    Note over U,API: durable run, nobody waits
     U->>API: start(pipe, bundle, inputs)
     API-->>U: run id, then exit
-    Note over U,API: later, any terminal
-    U->>API: piper runs wait <id>
+    Note over U,API: later, any terminal, any machine
+    U->>API: piper detached wait <id>
     API-->>U: result
 ```
 
-- **blocking** (`--mode blocking`) — one `client.execute()` call. Simplest, but behind the hosted gateway a run over ~30s is cut off with a `PipelineExecuteTimeoutError` that points you at durable mode.
-- **durable** (`--mode durable`, the default) — `client.start()` then poll to completion (`client.wait_for_result`). Survives the cap. The run id is printed *before* polling, so a Ctrl-C leaves the run executing server-side and you can resume it with `piper runs wait <id>`.
-- **detached** (`--mode detached`) — the same durable `client.start()`, but return immediately instead of polling. Pick the run back up later — even from another terminal — with `piper runs status|result|wait <id>`.
+### How the code is laid out
 
-Detached is durable too; the only difference is who waits. That is why it is a third value of `--mode` rather than a `--detach` flag layered on top of it: the three modes are mutually exclusive, so there is no way to ask for an incoherent combination.
+Each mode is a **self-contained copy-paste unit**: `piper/<mode>/cli.py` holds that mode's whole story — its commands, its SDK lifecycle, its progress rendering — with no dispatch layer in between. Reading path from command to API call is two hops, both in the same file:
 
-`piper/runner.py` branches on the mode explicitly instead of calling the SDK's `start_and_wait()` self-healing one-liner (the production shortcut when you don't care which path runs) — teaching the difference is the point of this starter.
+| Mode | The one function that *is* the mode | SDK calls |
+| --- | --- | --- |
+| `blocking` | `execute_pipe()` | `client.execute` |
+| `attended` | `start_and_wait()` | `client.start` + `client.wait_for_result` |
+| `detached` | `start_pipe()` (+ `attend_run()` for `wait`) | `client.start` (then `client.wait_for_result` later) |
+
+The only things shared across modes are the two concerns that have nothing to do with execution: `piper/inputs.py` (encode the inputs) and `piper/errors.py` (present an SDK error). **Lifecycle code is never shared** — that is what keeps each mode file copy-pasteable, and it is why the demo commands are near-duplicated across the three: diff `blocking/cli.py` against `attended/cli.py` and the only difference is the lifecycle helper. (`tests/unit/test_mode_symmetry.py` guards that duplication against drift.)
+
+The modes also spell out lifecycles the SDK could hide: `client.start_and_wait()` is a self-healing one-liner that picks the right path by itself — the production shortcut when you don't care which one runs. This starter branches explicitly because teaching the difference is the point.
 
 ## Project structure
 
 ```
 piper/
-  cli.py                         # the `piper` Typer CLI (console-script entry point)
-  runner.py                      # execution-mode dispatch: blocking / durable / detached
-  errors.py                      # maps SDK errors to CLI messages + hints
-  file_input.py                  # encode a local file into a Pipelex Document input envelope
+  cli.py                         # the `piper` console script: loads .env, mounts the three mode groups
+  blocking/cli.py                # the whole blocking mode in one file  (execute_pipe)
+  attended/cli.py                # the whole attended mode in one file  (start_and_wait)
+  detached/cli.py                # the whole detached mode in one file  (start_pipe + wait/status/result)
+  inputs.py                      # SHARED: text-or-file input, and file → Document envelope
+  errors.py                      # SHARED: maps SDK errors to CLI messages + hints
   generated/                     # typed clients generated from the bundles (`make codegen`) — do not edit
     extract_entities/            #   models.py (stamped) + codegen.lock
     summarize_pdf/
@@ -247,15 +279,19 @@ samples/
 tests/
   unit/                          # offline CLI / error-mapping / generated-client tests
   integration/                   # offline boot/bundle checks + API validate (pipelex_api)
-  e2e/                           # full run against the API (inference)
+  e2e/                           # full run against the API (inference) — one mode per demo
 .env.example                     # PIPELEX_BASE_URL + PIPELEX_API_KEY
 ```
+
+Only two modules are shared across the modes, and neither knows anything about execution: see [docs/cli-architecture.md](docs/cli-architecture.md) for the sharing rule and the anatomy of a mode file.
 
 ## Useful commands
 
 ```bash
-uv run piper extract-entities "…" --mode detached   # start a durable run, print its id, return
-uv run piper runs wait <run-id>                     # resume a detached run (also: runs status | runs result)
+uv run piper blocking extract-entities "…"     # one call, one response
+uv run piper attended generate-image "…"       # durable run, wait here for it
+uv run piper detached generate-image "…"       # durable run, print its id, return
+uv run piper detached wait <run-id>            # collect it later (also: detached status | detached result)
 make validate       # lint/validate the .mthds bundles with plxt (offline)
 make codegen        # regenerate the typed clients + input templates from the bundles
 make codegen-check  # verify the generated clients are current (offline, pure hashing)

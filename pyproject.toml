@@ -30,6 +30,9 @@ piper = "piper.cli:app"
 # piper/methods/*, this packages/package-data block, and the Makefile codegen targets.
 packages = [
   "piper",
+  "piper.attended",
+  "piper.blocking",
+  "piper.detached",
   "piper.generated",
   "piper.generated.extract_entities",
   "piper.generated.generate_image",

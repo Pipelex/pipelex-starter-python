@@ -3,7 +3,11 @@ from pathlib import Path
 import pytest
 from pipelex_sdk.client import PipelexAPIClient
 
-from piper.cli import METHODS_DIR
+import piper
+
+# The bundles ship with the package. Each mode CLI resolves them the same way
+# (`METHODS_DIR` in `piper/<mode>/cli.py`), so this check stays mode-agnostic.
+METHODS_DIR = Path(piper.__file__).parent / "methods"
 
 BUNDLE_PATHS = [
     METHODS_DIR / "extract-entities" / "main.mthds",

@@ -1,10 +1,15 @@
 """Present SDK errors as actionable CLI messages.
 
-This module defines no exception classes — it is a presentation mapper. Each
-CLI command catches `PipelineRequestError` (the base of every error the
-`pipelex-sdk` client raises) exactly once at its root, turns it into a
-`(message, hint)` pair here, and exits non-zero. Unexpected exceptions are
-deliberately NOT caught anywhere: they crash loudly with a full traceback.
+This module defines no exception classes — it is a presentation mapper. Each mode
+package's `_run()` wrapper (`piper/blocking/cli.py`, `piper/attended/cli.py`,
+`piper/detached/cli.py`) catches `PipelineRequestError` (the base of every error the
+`pipelex-sdk` client raises) exactly once, turns it into a `(message, hint)` pair here,
+and exits non-zero. Unexpected exceptions are deliberately NOT caught anywhere: they
+crash loudly with a full traceback.
+
+Error presentation is orthogonal to execution mode, so it is shared — but the hints
+name the mode *groups*, since the fix for a timed-out blocking run is to rerun it under
+another group.
 """
 
 from typing import NamedTuple
@@ -41,12 +46,12 @@ def present_error(exc: PipelineRequestError | httpx.HTTPStatusError) -> ErrorPre
     if isinstance(exc, PipelineExecuteTimeoutError):
         return ErrorPresentation(
             message=f"The blocking run exceeded the hosted gateway's ~30s synchronous cap ({exc.elapsed_seconds:.0f}s elapsed).",
-            hint="Retry with `--mode durable` — the durable path survives long runs.",
+            hint="Rerun the same command with `piper attended ...` — the durable path survives long runs.",
         )
     if isinstance(exc, RunLifecycleUnavailableError):
         return ErrorPresentation(
             message=f"The server at {exc.api_url} has no run store (durable run lifecycle unavailable).",
-            hint="You are talking to a bare runner — retry with `--mode blocking`.",
+            hint="You are talking to a bare runner — use `piper blocking ...`.",
         )
     if isinstance(exc, ApiResponseError):
         if exc.status in (401, 403):
@@ -66,12 +71,12 @@ def present_error(exc: PipelineRequestError | httpx.HTTPStatusError) -> ErrorPre
     if isinstance(exc, RunFailedError):
         return ErrorPresentation(
             message=f"Run {exc.run_id} ended with status {exc.status}: {exc}",
-            hint=f"Inspect it with `piper runs status {exc.run_id}`.",
+            hint=f"Inspect it with `piper detached status {exc.run_id}`.",
         )
     if isinstance(exc, RunTimeoutError):
         return ErrorPresentation(
             message=f"Gave up waiting for run {exc.run_id} after {exc.timeout_seconds:.0f}s — the run is still executing server-side.",
-            hint=f"Resume waiting with `piper runs wait {exc.run_id}`.",
+            hint=f"Resume waiting with `piper detached wait {exc.run_id}`.",
         )
     return ErrorPresentation(message=str(exc), hint=None)
 

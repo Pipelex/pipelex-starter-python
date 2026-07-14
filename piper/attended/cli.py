@@ -1,0 +1,141 @@
+"""The attended CLI — start a durable run, then wait here for its result.
+
+`client.start(...)` submits the run server-side (it survives anything, including
+the ~30s cap that kills `piper blocking`), and `client.wait_for_result(...)` polls
+it to completion from this terminal. The run id is printed *before* polling starts,
+so a Ctrl-C never loses the run: it keeps executing server-side and you resume it
+with `piper detached wait <id>`.
+
+The SDK also offers `start_and_wait()`, a self-healing one-liner that picks the
+right path by itself — that is the production shortcut. This starter spells the
+lifecycle out because teaching the difference is the point.
+
+Copy-paste unit: this file + `piper/inputs.py` + `piper/errors.py`. The three mode
+packages never share lifecycle code, so the demo commands below are deliberate
+mirrors of their `blocking` / `detached` twins: only `start_and_wait()` differs.
+"""
+
+import asyncio
+from pathlib import Path
+from typing import Annotated, Any, Coroutine, TypeVar
+
+import httpx
+import typer
+from mthds.protocol.exceptions import PipelineRequestError
+from pipelex_sdk.client import PipelexAPIClient
+from pipelex_sdk.runs import PollInfo, WaitForResultOptions
+from rich.console import Console
+
+from piper.errors import present_error
+from piper.generated.extract_entities.models import ExtractedEntities
+from piper.generated.generate_image.models import Image
+from piper.generated.summarize_pdf.models import DocumentSummary
+from piper.inputs import build_document_input, read_text_input
+
+ResultT = TypeVar("ResultT")
+
+METHODS_DIR = Path(__file__).parent.parent / "methods"
+
+app = typer.Typer(no_args_is_help=True, help="Run a demo as a durable run and wait here for the result.")
+
+# Results go to stdout (pipeable); progress chatter goes to stderr.
+output_console = Console()
+progress_console = Console(stderr=True)
+
+
+async def start_and_wait(*, pipe_code: str, bundle: str, inputs: dict[str, Any]) -> Any:
+    """The whole attended lifecycle: start a durable run, print its id, wait here for the result.
+
+    Credentials come from `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`. The SDK resolves the
+    method's main output for you: `.main_stuff` is the content the pipe named as its
+    result (a completed run that names none raises `MissingMainStuffError`).
+    """
+    async with PipelexAPIClient() as client:
+        start_result = await client.start(pipe_code=pipe_code, mthds_contents=[bundle], inputs=inputs)
+        run_id = start_result.pipeline_run_id
+        # Printed before the first poll, so Ctrl-C leaves you with a usable run id.
+        progress_console.print(f"Run started: [bold]{run_id}[/bold]")
+        short_id = run_id[:8]
+        with progress_console.status(f"Run {short_id}… in progress") as status:
+
+            def on_poll(info: PollInfo) -> None:
+                status.update(f"Run {short_id}… in progress — {info.elapsed_seconds:.0f}s, poll #{info.attempt}")
+
+            try:
+                results = await client.wait_for_result(run_id, options=WaitForResultOptions(on_poll=on_poll))
+            except asyncio.CancelledError:
+                # Ctrl-C: the run keeps executing server-side — it has just become a detached run.
+                progress_console.print(f"\nInterrupted — the run is still executing. Resume with: [bold]piper detached wait {run_id}[/bold]")
+                raise
+    return results.main_stuff
+
+
+@app.command(name="extract-entities")
+def extract_entities(
+    text: Annotated[str | None, typer.Argument(help="The text to extract entities from.")] = None,
+    file: Annotated[Path | None, typer.Option("--file", help="Read the input text from a file instead of the argument.")] = None,
+) -> None:
+    """Extract people, organizations, and dates from a piece of text."""
+    input_text = read_text_input(text=text, file=file)
+    bundle = (METHODS_DIR / "extract-entities" / "main.mthds").read_text()
+    main_stuff = _run(start_and_wait(pipe_code="extract_entities", bundle=bundle, inputs={"text": input_text}))
+    # Narrow into the generated typed model (validates the concept's shape), then print it as JSON.
+    entities = ExtractedEntities.model_validate(main_stuff)
+    output_console.print_json(data=entities.model_dump())
+
+
+@app.command(name="summarize-pdf")
+def summarize_pdf(file: Annotated[Path, typer.Argument(help="Path to the PDF (or other document) to summarize.")]) -> None:
+    """Summarize a document into a title, type, and key points."""
+    if not file.is_file():
+        msg = f"No such file: {file}"
+        raise typer.BadParameter(msg)
+    bundle = (METHODS_DIR / "summarize-pdf" / "main.mthds").read_text()
+    inputs = {"document": build_document_input(file)}
+    main_stuff = _run(start_and_wait(pipe_code="summarize_pdf", bundle=bundle, inputs=inputs))
+    summary = DocumentSummary.model_validate(main_stuff)
+    output_console.print_json(data=summary.model_dump())
+
+
+@app.command(name="generate-image")
+def generate_image(
+    prompt: Annotated[str | None, typer.Argument(help="The text prompt describing the image to generate.")] = None,
+    file: Annotated[Path | None, typer.Option("--file", help="Read the prompt from a file instead of the argument.")] = None,
+) -> None:
+    """Generate an image from a text prompt.
+
+    The same method `piper blocking generate-image` cannot finish: image generation
+    routinely outlives the hosted ~30s cap. Run durably, it just takes as long as it
+    takes.
+    """
+    image_prompt = read_text_input(text=prompt, file=file)
+    bundle = (METHODS_DIR / "generate-image" / "main.mthds").read_text()
+    main_stuff = _run(start_and_wait(pipe_code="generate_image", bundle=bundle, inputs={"image_prompt": image_prompt}))
+    # On the hosted path the runtime returns a storage `url` (`pipelex-storage://…`)
+    # *and* a web-renderable `public_url` (a signed URL); the model keeps both.
+    image = Image.model_validate(main_stuff)
+    output_console.print_json(data=image.model_dump())
+
+
+def _run(coro: Coroutine[Any, Any, ResultT]) -> ResultT:
+    """Await the lifecycle, presenting SDK errors and Ctrl-C as clean exits.
+
+    Every error the SDK client raises descends from `PipelineRequestError`, except the
+    raw `httpx.HTTPStatusError` its protocol routes surface. Nothing else is caught:
+    an unexpected exception crashes loudly with its traceback.
+    """
+    try:
+        return asyncio.run(coro)
+    except (PipelineRequestError, httpx.HTTPStatusError) as exc:
+        presentation = present_error(exc)
+        progress_console.print(f"[red]Error:[/red] {presentation.message}")
+        if presentation.hint:
+            progress_console.print(f"[yellow]Hint:[/yellow] {presentation.hint}")
+        raise typer.Exit(1) from exc
+    except KeyboardInterrupt as exc:
+        # The resume hint was already printed by `start_and_wait`; the run keeps executing server-side.
+        raise typer.Exit(130) from exc
+
+
+if __name__ == "__main__":
+    app()

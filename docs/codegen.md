@@ -12,7 +12,7 @@ The typed models this starter parses run results into are **generated from the `
 
 Each `models.py` starts with a `pipelex-codegen-stamp` header recording the source crate fingerprint, engine version, projection, and a content hash. The sibling `codegen.lock` records the generated artifact set. Together they make drift detectable offline.
 
-The CLI commands in `piper/cli.py` import the generated models and only add the bundle path, the pipe code, and the narrowing line (`Model.model_validate(results.main_stuff)`) — nothing method-shaped is hand-written.
+The demo commands in each mode CLI (`piper/blocking/cli.py`, `piper/attended/cli.py`) import the generated models and only add the bundle path, the pipe code, and the narrowing line (`Model.model_validate(main_stuff)`) — nothing method-shaped is hand-written.
 
 ## Workflow
 
@@ -42,4 +42,4 @@ Once a released `pipelex` ships `codegen`, `codegen-check` is meant to run in CI
 
 ## Offline test floor
 
-`tests/unit/test_generated_clients.py` runs everywhere (no pipelex CLI, no API key): it checks the generated modules import, carry the stamp + lock, round-trip their own serialization, and that each committed input template names exactly the inputs the CLI dispatches — so a regenerated template that no longer matches `piper/cli.py` fails in CI even before `codegen-check` is wired in.
+`tests/unit/test_generated_clients.py` runs everywhere (no pipelex CLI, no API key): it checks the generated modules import, carry the stamp + lock, round-trip their own serialization, and that each committed input template names exactly the inputs the CLI passes — so a regenerated template that no longer matches what `piper/<mode>/cli.py` sends fails in CI even before `codegen-check` is wired in.

@@ -25,6 +25,7 @@ def load_bootstrap() -> Any:
 
 def write_template(root: Path, *, extra_pyproject: str = "") -> None:
     (root / "piper").mkdir()
+    (root / "piper" / "blocking").mkdir()
     (root / "tests").mkdir()
     (root / "pyproject.toml").write_text(
         f"""[project]
@@ -40,6 +41,7 @@ piper = "piper.cli:app"
 # piper/methods/*, this packages/package-data block, and the Makefile codegen targets.
 packages = [
   "piper",
+  "piper.blocking",
   "piper.generated",
   "piper.generated.extract_entities",
 ]
@@ -68,6 +70,8 @@ include = ["piper", "tests"]
     (root / "CLAUDE.md").write_text("The `piper` CLI lives in `piper/cli.py`.\n", encoding="utf-8")
     (root / "LICENSE").write_text("MIT License\n\nCopyright (c) 2025 Example\n", encoding="utf-8")
     (root / "piper" / "cli.py").write_text('"""The piper CLI."""\n', encoding="utf-8")
+    # A mode sub-package: nested dir, and an import of a sibling module to rewrite.
+    (root / "piper" / "blocking" / "cli.py").write_text("from piper.inputs import read_text_input\n", encoding="utf-8")
     (root / "tests" / "test_cli.py").write_text("from piper.cli import app\n", encoding="utf-8")
 
 

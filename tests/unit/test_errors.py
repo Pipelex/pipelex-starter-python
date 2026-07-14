@@ -18,17 +18,17 @@ def _http_status_error(status_code: int) -> httpx.HTTPStatusError:
 
 
 class TestPresentError:
-    def test_execute_timeout_hints_durable(self):
+    def test_execute_timeout_hints_attended(self):
         presentation = present_error(PipelineExecuteTimeoutError("timed out", elapsed_seconds=31.2))
         assert "~30s" in presentation.message
         assert presentation.hint is not None
-        assert "--mode durable" in presentation.hint
+        assert "piper attended" in presentation.hint
 
     def test_lifecycle_unavailable_hints_blocking(self):
         presentation = present_error(RunLifecycleUnavailableError("no run store", api_url="http://localhost:8000"))
         assert "http://localhost:8000" in presentation.message
         assert presentation.hint is not None
-        assert "--mode blocking" in presentation.hint
+        assert "piper blocking" in presentation.hint
 
     def test_http_auth_error_hints_api_key(self):
         # The protocol routes (execute/start/runs) raise raw httpx.HTTPStatusError,
@@ -53,9 +53,9 @@ class TestPresentError:
         presentation = present_error(RunFailedError("run failed", run_id="run-9", status=RunStatus.FAILED))
         assert "run-9" in presentation.message
         assert presentation.hint is not None
-        assert "runs status run-9" in presentation.hint
+        assert "piper detached status run-9" in presentation.hint
 
     def test_run_timeout_hints_wait(self):
         presentation = present_error(RunTimeoutError("too slow", run_id="run-9", timeout_seconds=1200.0))
         assert presentation.hint is not None
-        assert "runs wait run-9" in presentation.hint
+        assert "piper detached wait run-9" in presentation.hint
