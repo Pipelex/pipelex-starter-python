@@ -5,6 +5,7 @@ from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
 from piper.cli import app
+from piper.inputs import SAMPLE_ENTITIES_TEXT, SAMPLE_IMAGE_PROMPT
 
 ENTITIES_CONTENT = {"people": ["Marie Curie"], "orgs": ["University of Paris"], "dates": ["1906"]}
 RUN_ID = "run-abc123"
@@ -30,9 +31,14 @@ class TestDetachedCli:
         # The bare id on stdout is the contract: RUN_ID=$(piper detached extract-entities "…")
         assert result.stdout.strip() == RUN_ID
 
-    def test_extract_entities_requires_input(self):
+    def test_extract_entities_falls_back_to_the_sample(self, mocker: MockerFixture):
+        start_mock = mocker.patch("piper.detached.cli.start_pipe", return_value=RUN_ID)
         result = runner.invoke(app, ["detached", "extract-entities"])
-        assert result.exit_code != 0
+        assert result.exit_code == 0
+        assert start_mock.await_args is not None
+        assert start_mock.await_args.kwargs["inputs"] == {"text": SAMPLE_ENTITIES_TEXT}
+        # The sample notice goes to stderr, so stdout stays the bare run id.
+        assert result.stdout.strip() == RUN_ID
 
     def test_extract_entities_rejects_both_text_and_file(self, tmp_path: Path):
         input_file = tmp_path / "input.txt"
@@ -49,9 +55,14 @@ class TestDetachedCli:
         assert start_mock.await_args is not None
         assert start_mock.await_args.kwargs["inputs"] == {"text": "text from a file"}
 
-    def test_summarize_pdf_requires_a_file(self):
+    def test_summarize_pdf_falls_back_to_the_sample_invoice(self, mocker: MockerFixture):
+        start_mock = mocker.patch("piper.detached.cli.start_pipe", return_value=RUN_ID)
         result = runner.invoke(app, ["detached", "summarize-pdf"])
-        assert result.exit_code != 0
+        assert result.exit_code == 0
+        assert start_mock.await_args is not None
+        document_input = start_mock.await_args.kwargs["inputs"]["document"]
+        assert document_input["concept"] == "Document"
+        assert document_input["content"]["filename"] == "sample-invoice.pdf"
 
     def test_summarize_pdf_rejects_a_missing_file(self, tmp_path: Path):
         result = runner.invoke(app, ["detached", "summarize-pdf", str(tmp_path / "nope.pdf")])
@@ -69,9 +80,13 @@ class TestDetachedCli:
         assert document_input["content"]["mime_type"] == "application/pdf"
         assert document_input["content"]["url"].startswith("data:application/pdf;base64,")
 
-    def test_generate_image_requires_input(self):
+    def test_generate_image_falls_back_to_the_sample(self, mocker: MockerFixture):
+        start_mock = mocker.patch("piper.detached.cli.start_pipe", return_value=RUN_ID)
         result = runner.invoke(app, ["detached", "generate-image"])
-        assert result.exit_code != 0
+        assert result.exit_code == 0
+        assert start_mock.await_args is not None
+        assert start_mock.await_args.kwargs["inputs"] == {"image_prompt": SAMPLE_IMAGE_PROMPT}
+        assert result.stdout.strip() == RUN_ID
 
     def test_generate_image_sends_the_prompt(self, mocker: MockerFixture):
         start_mock = mocker.patch("piper.detached.cli.start_pipe", return_value=RUN_ID)

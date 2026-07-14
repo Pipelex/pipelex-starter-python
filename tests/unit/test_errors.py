@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 import httpx
 from pipelex_sdk.errors import (
     ApiUnreachableError,
@@ -11,9 +13,9 @@ from pipelex_sdk.runs import RunStatus
 from piper.errors import present_error
 
 
-def _http_status_error(status_code: int) -> httpx.HTTPStatusError:
-    request = httpx.Request("POST", "https://api.pipelex.com/v1/execute")
-    response = httpx.Response(status_code, request=request)
+def _http_status_error(status_code: int, *, problem: Mapping[str, object] | None = None) -> httpx.HTTPStatusError:
+    request = httpx.Request("POST", "https://api.pipelex.com/v1/start")
+    response = httpx.Response(status_code, request=request, json=problem) if problem is not None else httpx.Response(status_code, request=request)
     return httpx.HTTPStatusError("boom", request=request, response=response)
 
 
@@ -41,6 +43,25 @@ class TestPresentError:
 
     def test_http_server_error_has_no_hint(self):
         presentation = present_error(_http_status_error(500))
+        assert presentation.hint is None
+
+    def test_start_without_async_orchestration_hints_blocking(self):
+        # A synchronous-only runner rejects /start with this RFC 7807 error_type;
+        # the fix is to run the same demo under `piper blocking`.
+        problem = {
+            "error_type": "StartRequiresAsyncOrchestration",
+            "detail": "Orchestration mode 'direct' cannot honor fire-and-forget delivery. Use /execute instead.",
+            "status": 400,
+        }
+        presentation = present_error(_http_status_error(400, problem=problem))
+        assert "Orchestration mode 'direct'" in presentation.message
+        assert presentation.hint is not None
+        assert "piper blocking" in presentation.hint
+
+    def test_http_error_surfaces_the_problem_detail(self):
+        problem = {"title": "Bad input", "detail": "Missing required input 'text'.", "status": 400}
+        presentation = present_error(_http_status_error(400, problem=problem))
+        assert "Missing required input 'text'." in presentation.message
         assert presentation.hint is None
 
     def test_unreachable_hints_base_url(self):

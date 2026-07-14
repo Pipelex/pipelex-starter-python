@@ -60,7 +60,11 @@ All three lifecycle helpers return the run's resolved `main_stuff` (the SDK type
 
 **Errors are caught once, at the root of the command.** `_run()` catches `PipelineRequestError` (the base of every error the SDK client raises) and the raw `httpx.HTTPStatusError` its protocol routes surface, maps it to a `(message, hint)` pair via `piper/errors.py`, and exits non-zero. Nothing else is caught anywhere: an unexpected exception crashes loudly with its traceback, which is what you want while you are building.
 
-The hints name the mode *groups*, because the fix for a failed run is usually another group: a blocking run that hit the ~30s cap tells you to rerun it with `piper attended`; a run that timed out while you waited tells you to resume it with `piper detached wait <id>`.
+The protocol routes (`execute`/`start`/`runs/*`) surface a non-2xx as a raw `httpx.HTTPStatusError`, whose default string is useless (`Client error '400 Bad Request' for url …` + an MDN link). `piper/errors.py` instead reads the API's RFC 7807 **problem+json** body and shows the server's own `detail`, branching on the structured `error_type` (never the transport status) for the cases worth a hint — a `/start` against a synchronous-only runner (`StartRequiresAsyncOrchestration`) is presented with a hint pointing at `piper blocking`.
+
+The hints name the mode *groups*, because the fix for a failed run is usually another group: a blocking run that hit the ~30s cap tells you to rerun it with `piper attended`; a run that timed out while you waited tells you to resume it with `piper detached wait <id>`; a durable run against a runner that can't do them tells you to use `piper blocking`.
+
+**Every demo runs with zero arguments.** When you give neither an argument nor `--file`, the input helper returns a bundled sample (`piper/inputs.py`'s `SAMPLE_*` constants), and the command prints a one-line notice on stderr saying so. A fresh clone shows a working result on its very first command; stdout stays the clean, pipeable result because the notice is on stderr. Sample data is orthogonal to execution, so like input encoding it is shared, not duplicated per mode.
 
 ## Why `attended` and `detached`, not `durable`
 

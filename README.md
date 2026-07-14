@@ -63,6 +63,14 @@ You get the extracted entities as JSON:
 
 Each demo is one self-contained `piper` command — a bundle path, a pipe code, and a typed narrowing of the result into its *generated* model. Every demo exists in every execution mode; the commands below use `blocking`, the simplest one.
 
+**Every demo runs with no arguments.** Give it nothing and it uses a bundled sample (and tells you so on stderr), so you can see a working result before you have any input of your own — then pass your own text, prompt, or file to replace it:
+
+```bash
+uv run piper blocking extract-entities        # uses the sample text
+uv run piper blocking summarize-pdf           # uses samples/sample-invoice.pdf
+uv run piper blocking generate-image          # uses the sample prompt
+```
+
 **Extract entities** — text in, structured entities out.
 
 ```bash

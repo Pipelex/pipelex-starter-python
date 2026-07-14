@@ -6,39 +6,61 @@ than in one of the mode packages (`piper/blocking`, `piper/attended`,
 
 Two shapes cover the demos:
 
-- `read_text_input()` — a text argument or a `--file` pointing at one.
+- `read_text_input()` — a text argument, a `--file` pointing at one, or (when you
+  give neither) a built-in sample, so every demo runs with zero arguments.
 - `build_document_input()` — a local file, base64-encoded into a `data:` URL and
   wrapped in the `Document` envelope the API expects: `{"concept": "Document",
   "content": {"url": ..., "filename": ..., "mime_type": ...}}`. The API decodes
   it server-side and uploads it to storage, so the CLI never has to host the file
   itself. This mirrors `buildDocumentInput` in the JS starter's `fileEncoding.ts`.
+
+The built-in samples let a fresh clone show a working result before you have any
+input of your own; they are also the values the README documents.
 """
 
 import base64
 import mimetypes
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import typer
 
 DEFAULT_MIME_TYPE = "application/octet-stream"
 
+# Sample inputs — the zero-argument fallback for each demo (also the README's examples).
+SAMPLE_ENTITIES_TEXT = "Alice from Acme met Bob on May 3rd, 2026."
+SAMPLE_IMAGE_PROMPT = "a fox reading under a tree"
+SAMPLE_INVOICE = Path(__file__).parent.parent / "samples" / "sample-invoice.pdf"
 
-def read_text_input(*, text: str | None, file: Path | None) -> str:
-    """Resolve a text input given inline as an argument or via `--file` — exactly one of the two.
+
+class TextInput(NamedTuple):
+    """A resolved text input, plus whether it came from the built-in sample.
+
+    The `is_sample` flag lets a command tell the user it filled in the input for
+    them (so the result isn't mysterious) without the input helper owning a console.
+    """
+
+    text: str
+    is_sample: bool
+
+
+def read_text_input(*, text: str | None, file: Path | None, sample: str) -> TextInput:
+    """Resolve the text to process: an argument, a `--file`, or the built-in `sample`.
+
+    An explicit argument or `--file` wins; with neither, `sample` is used so the
+    command runs with no arguments at all.
 
     Raises:
-        typer.BadParameter: both were given, or neither was.
+        typer.BadParameter: both an argument and `--file` were given.
     """
     if text is not None and file is not None:
         msg = "Give the text either as an argument or via --file, not both."
         raise typer.BadParameter(msg)
     if file is not None:
-        return file.read_text()
+        return TextInput(text=file.read_text(), is_sample=False)
     if text is not None:
-        return text
-    msg = "Give the text to process as an argument, or point --file at a text file."
-    raise typer.BadParameter(msg)
+        return TextInput(text=text, is_sample=False)
+    return TextInput(text=sample, is_sample=True)
 
 
 def build_document_input(path: Path) -> dict[str, Any]:
