@@ -21,6 +21,15 @@ UV_MIN_VERSION = $(shell grep -m1 'required-version' pyproject.toml | sed -E 's/
 
 USUAL_PYTEST_MARKERS := "(dry_runnable or not inference) and not (needs_output or pipelex_api)"
 
+# The pipelex CLI that runs codegen. It is NOT a dependency of this starter (the starter talks to
+# the hosted API through pipelex-sdk) — point PIPELEX at a pipelex install that ships `codegen`,
+# e.g. `PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen`.
+PIPELEX ?= pipelex
+
+# Every programmatic invocation goes through this: --no-logo keeps the banner out of CI logs
+# and agent context. Override PIPELEX, not this.
+PIPELEX_RUN = $(PIPELEX) --no-logo
+
 define PRINT_TITLE
     $(eval PROJECT_PART := [$(PROJECT_NAME)])
     $(eval TARGET_PART := ($@))
@@ -50,6 +59,8 @@ make export-requirements-dev  - Export requirements-dev.txt (all dependencies in
 make er                       - Shorthand -> export-requirements
 make erd                      - Shorthand -> export-requirements-dev
 make validate                 - Lint/validate the .mthds bundle with plxt
+make codegen                  - Regenerate the typed clients + input templates from the .mthds methods
+make codegen-check            - Verify the generated clients are current (offline, pure hashing)
 
 make format                   - Format all (ruff-format + plxt-format)
 make lint                     - Lint all (ruff-lint + plxt-lint)
@@ -104,7 +115,7 @@ export HELP
 	test t test-quiet tq test-with-prints tp test-inference ti \
 	codex-tests gha-tests \
 	run-all-tests run-manual-trigger-gha-tests run-gha_disabled-tests \
-	validate v check c cc agent-check agent-test \
+	validate v check c cc agent-check agent-test codegen codegen-check \
 	merge-check-ruff-lint merge-check-ruff-format merge-check-plxt-format merge-check-plxt-lint merge-check-mypy merge-check-pyright \
 	li check-unused-imports fix-unused-imports check-uv check-TODOs
 
@@ -190,6 +201,32 @@ erd: export-requirements-dev
 validate: env
 	$(call PRINT_TITLE,"Validating the .mthds bundle with plxt")
 	$(VENV_PLXT) lint
+
+##########################################################################################
+### CODEGEN
+##########################################################################################
+
+# Regenerate the typed clients (stamped models + codegen.lock) and the runnable input
+# templates from the .mthds methods. Run after editing any main.mthds, then commit the result.
+# The method list here must stay in lockstep with piper/methods/* and the
+# packages/package-data lists in pyproject.toml.
+codegen:
+	$(call PRINT_TITLE,"Regenerating typed clients from the .mthds methods")
+	@$(PIPELEX_RUN) codegen types --target python-pydantic --output piper/generated/extract_entities piper/methods/extract-entities && \
+	$(PIPELEX_RUN) codegen types --target python-pydantic --output piper/generated/summarize_pdf piper/methods/summarize-pdf && \
+	$(PIPELEX_RUN) codegen types --target python-pydantic --output piper/generated/generate_image piper/methods/generate-image && \
+	$(PIPELEX_RUN) codegen inputs --output piper/methods/extract-entities/inputs.template.json piper/methods/extract-entities && \
+	$(PIPELEX_RUN) codegen inputs --output piper/methods/summarize-pdf/inputs.template.json piper/methods/summarize-pdf && \
+	$(PIPELEX_RUN) codegen inputs --output piper/methods/generate-image/inputs.template.json piper/methods/generate-image && \
+	echo "Regenerated typed clients and input templates"
+
+# Offline drift check: pure hashing against each codegen.lock — no engine boot, no network,
+# no API key. Exit 0 = current, 1 = drift (stale/hand-edited), 2 = no lock.
+codegen-check:
+	$(call PRINT_TITLE,"Checking generated clients are current - offline")
+	@$(PIPELEX_RUN) codegen check piper/generated/extract_entities && \
+	$(PIPELEX_RUN) codegen check piper/generated/summarize_pdf && \
+	$(PIPELEX_RUN) codegen check piper/generated/generate_image
 
 ##############################################################################################
 ############################      Cleaning                        ############################

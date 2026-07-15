@@ -1,7 +1,9 @@
 import pytest
 
-from piper.examples.generate_image import BUNDLE_PATH, PIPE_CODE, parse
-from piper.runner import run_durable_attended
+from piper.detached.cli import METHODS_DIR, attend_run, start_pipe
+from piper.generated.generate_image.models import Image
+
+BUNDLE_PATH = METHODS_DIR / "generate-image" / "main.mthds"
 
 SAMPLE_PROMPT = "A watercolor painting of a fox reading a book under a tree."
 
@@ -10,9 +12,13 @@ SAMPLE_PROMPT = "A watercolor painting of a fox reading a book under a tree."
 @pytest.mark.img_gen
 @pytest.mark.pipelex_api
 class TestGenerateImage:
-    async def test_durable(self):
-        # Image generation outlives the ~30s blocking cap, so only the durable path is exercised.
+    async def test_detached(self):
+        # The detached lifecycle end to end, and with it the whole run-id story:
+        # start, get an id back, then pick the run up again through that id alone.
+        # Image generation outlives the ~30s blocking cap, so it is the demo detached mode owns.
         bundle = BUNDLE_PATH.read_text()
-        results = await run_durable_attended(pipe_code=PIPE_CODE, bundle=bundle, inputs={"image_prompt": SAMPLE_PROMPT})
-        image = parse(results)
+        run_id = await start_pipe(pipe_code="generate_image", bundle=bundle, inputs={"image_prompt": SAMPLE_PROMPT})
+        assert run_id
+        main_stuff = await attend_run(run_id)
+        image = Image.model_validate(main_stuff)
         assert image.url

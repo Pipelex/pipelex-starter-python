@@ -25,6 +25,7 @@ def load_bootstrap() -> Any:
 
 def write_template(root: Path, *, extra_pyproject: str = "") -> None:
     (root / "piper").mkdir()
+    (root / "piper" / "blocking").mkdir()
     (root / "tests").mkdir()
     (root / "pyproject.toml").write_text(
         f"""[project]
@@ -37,10 +38,22 @@ license = "MIT"
 piper = "piper.cli:app"
 
 [tool.setuptools]
-packages = ["piper", "piper.examples"]
+# piper/methods/*, this packages/package-data block, and the Makefile codegen targets.
+packages = [
+  "piper",
+  "piper.blocking",
+  "piper.generated",
+  "piper.generated.extract_entities",
+]
 
 [tool.setuptools.package-data]
 piper = ["py.typed", "methods/*/main.mthds"]
+"piper.generated.extract_entities" = ["codegen.lock"]
+
+[tool.ruff]
+extend-exclude = [
+  "piper/generated",
+]
 
 [project.urls]
 Repository = "https://github.com/yourusername/piper" # Replace with your repository URL
@@ -57,6 +70,8 @@ include = ["piper", "tests"]
     (root / "CLAUDE.md").write_text("The `piper` CLI lives in `piper/cli.py`.\n", encoding="utf-8")
     (root / "LICENSE").write_text("MIT License\n\nCopyright (c) 2025 Example\n", encoding="utf-8")
     (root / "piper" / "cli.py").write_text('"""The piper CLI."""\n', encoding="utf-8")
+    # A mode sub-package: nested dir, and an import of a sibling module to rewrite.
+    (root / "piper" / "blocking" / "cli.py").write_text("from piper.inputs import read_text_input\n", encoding="utf-8")
     (root / "tests" / "test_cli.py").write_text("from piper.cli import app\n", encoding="utf-8")
 
 
@@ -81,7 +96,10 @@ def test_survivor_check_allows_requested_values_containing_piper(tmp_path: Path)
 
 def test_survivor_check_still_rejects_unhandled_template_tokens(tmp_path: Path) -> None:
     bootstrap = load_bootstrap()
-    write_template(tmp_path, extra_pyproject='custom = "piper"\n')
+    # A bare `piper` word inside prose (not quoted-exact, not in package position)
+    # is a shape the pyproject transform refuses to guess at — it must survive
+    # the substitution pass and abort the bootstrap.
+    write_template(tmp_path, extra_pyproject='custom = "run piper somewhere"\n')
 
     names = bootstrap.Names(dist="invoice-extractor", package="invoice_extractor", title="Invoice Extractor")
     opts = bootstrap.Options(
@@ -98,4 +116,4 @@ def test_survivor_check_still_rejects_unhandled_template_tokens(tmp_path: Path) 
     with pytest.raises(SystemExit) as exc_info:
         bootstrap.run(tmp_path, names, opts)
 
-    assert 'custom = "piper"' in str(exc_info.value)
+    assert 'custom = "run piper somewhere"' in str(exc_info.value)
