@@ -26,6 +26,12 @@ class TestInputs:
         with pytest.raises(typer.BadParameter):
             read_text_input(text="inline text", file=input_file, sample="the sample")
 
+    def test_read_text_input_rejects_a_missing_file(self, tmp_path: Path):
+        # Same clean CLI error as the `summarize-pdf` document path — a mistyped
+        # --file must not surface as a raw FileNotFoundError traceback.
+        with pytest.raises(typer.BadParameter):
+            read_text_input(text=None, file=tmp_path / "nope.txt", sample="the sample")
+
     def test_read_text_input_falls_back_to_the_sample(self):
         resolved = read_text_input(text=None, file=None, sample="the sample")
         assert resolved.text == "the sample"

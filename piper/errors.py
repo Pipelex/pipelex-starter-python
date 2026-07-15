@@ -116,7 +116,9 @@ def _read_problem_json(response: httpx.Response) -> dict[str, Any]:
     """Best-effort parse of an RFC 7807 problem+json body; `{}` when it isn't JSON."""
     try:
         body: Any = response.json()
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        # UnicodeDecodeError: `response.json()` is `json.loads(response.content)`,
+        # which raises it (not JSONDecodeError) on a non-UTF-8 body.
         return {}
     if isinstance(body, dict):
         # JSON object keys are always strings.

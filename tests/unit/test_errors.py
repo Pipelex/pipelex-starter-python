@@ -58,6 +58,16 @@ class TestPresentError:
         assert presentation.hint is not None
         assert "piper blocking" in presentation.hint
 
+    def test_http_error_with_undecodable_body_falls_back_to_status(self):
+        # A non-UTF-8 body makes `response.json()` raise UnicodeDecodeError (not
+        # JSONDecodeError); the best-effort problem+json parse must still fall
+        # back to the status-only message instead of crashing mid-presentation.
+        request = httpx.Request("POST", "https://api.pipelex.com/v1/start")
+        response = httpx.Response(400, request=request, headers={"content-type": "application/problem+json"}, content=b"\xffnot-json")
+        presentation = present_error(httpx.HTTPStatusError("boom", request=request, response=response))
+        assert presentation.message == "The API answered 400 Bad Request."
+        assert presentation.hint is None
+
     def test_http_error_surfaces_the_problem_detail(self):
         problem = {"title": "Bad input", "detail": "Missing required input 'text'.", "status": 400}
         presentation = present_error(_http_status_error(400, problem=problem))

@@ -5,10 +5,10 @@ This starter has two jobs: show how easy it is to call the Pipelex API, and be c
 So the execution mode is not an option you pass, it is the command group you type:
 
 ```
-piper blocking  extract-entities | summarize-pdf | generate-image
-piper attended  extract-entities | summarize-pdf | generate-image
-piper detached  extract-entities | summarize-pdf | generate-image
-piper detached  wait | status | result   <run-id>
+piper blocking  extract-entities     # or summarize-pdf, generate-image
+piper attended  extract-entities     # or summarize-pdf, generate-image
+piper detached  extract-entities     # or summarize-pdf, generate-image
+piper detached  wait <run-id>        # or status, result
 ```
 
 ## The layout
@@ -23,7 +23,7 @@ piper/
   detached/cli.py   # the whole detached mode + the run-id lifecycle commands
 ```
 
-Each mode file is a **copy-paste unit**: that file plus `inputs.py` plus `errors.py` is everything you need to lift the mode into your own project. Nothing else in `piper/` is load-bearing for it.
+Each mode file is a **copy-paste unit**: that file plus `inputs.py` plus `errors.py` is all the *lifecycle* code you need to lift the mode into your own project. A runnable copy also carries the method-specific artifacts the demos reference — the bundles (`piper/methods/`), the generated models (`piper/generated/`), and the sample document — but those are exactly what you replace with your own method anyway. No other code in `piper/` is load-bearing for a mode.
 
 ## The sharing rule
 
@@ -41,7 +41,7 @@ All three have the same four-part shape, so they diff cleanly:
 
 1. **Module docstring** — the mode's contract in a paragraph, plus its copy-paste contract.
 2. **App + consoles** — its own `typer.Typer`, its own `Console()` (stdout, for results — pipeable) and `Console(stderr=True)` (stderr, for progress chatter).
-3. **The lifecycle helper** — one public async function that *is* the mode. It gets a public name because it is the featured code, and it is what the unit tests patch and the e2e tests call directly.
+3. **The lifecycle helper** — one public async function that *is* the mode (`detached` adds the run-id lifecycle helpers described below). It gets a public name because it is the featured code, and it is what the unit tests patch and the e2e tests call directly.
 4. **The demo commands + a private `_run()`** — each command reads its input, reads its bundle, awaits the lifecycle helper through `_run()` (`asyncio.run` + the single `except (PipelineRequestError, httpx.HTTPStatusError)` that presents via `piper/errors.py`), narrows the result into its *generated* model, prints JSON.
 
 | Mode | Lifecycle helper | SDK calls | What the demo prints |
@@ -52,19 +52,19 @@ All three have the same four-part shape, so they diff cleanly:
 
 `detached` additionally owns the run-id lifecycle: `attend_run()` backs `wait`, and thin fetchers back `status` and `result`. It is the only mode with more than the demos, because "start now, collect later" is only a complete story if you can come back for the result.
 
-All three lifecycle helpers return the run's resolved `main_stuff` (the SDK types it `Any` — the content is polymorphic), and each command's `Model.model_validate(main_stuff)` is what restores type safety. The models are generated from the bundles; see [codegen.md](codegen.md).
+The result-producing helpers — `execute_pipe()`, `start_and_wait()`, and detached's `attend_run()` — return the run's resolved `main_stuff` (the SDK types it `Any` — the content is polymorphic). In blocking and attended mode each demo command narrows it with `Model.model_validate(main_stuff)`, which is what restores type safety; the models are generated from the bundles (see [codegen.md](codegen.md)). Detached is different by design: `start_pipe()` returns only the run id, and the run-id commands (`wait`, `result`) print the output generically — at collection time the command doesn't know which method the run executed, so there is no model to narrow into.
 
 ## Two conventions worth copying
 
 **stdout is the result; stderr is everything else.** Progress spinners, run ids in attended mode, error messages, and hints all go to stderr, so stdout stays pipeable. In detached mode the run id *is* the result, so it goes to stdout bare (`print`, not Rich) — `RUN_ID=$(piper detached generate-image "…")` just works.
 
-**Errors are caught once, at the root of the command.** `_run()` catches `PipelineRequestError` (the base of every error the SDK client raises) and the raw `httpx.HTTPStatusError` its protocol routes surface, maps it to a `(message, hint)` pair via `piper/errors.py`, and exits non-zero. Nothing else is caught anywhere: an unexpected exception crashes loudly with its traceback, which is what you want while you are building.
+**SDK errors are presented once, at the root of the command.** `_run()` catches `PipelineRequestError` (the base of every error the SDK client raises) and the raw `httpx.HTTPStatusError` its protocol routes surface, maps it to a `(message, hint)` pair via `piper/errors.py`, and exits non-zero. Ctrl-C is handled separately: the durable lifecycle helpers catch the cancellation just long enough to print the resume hint before re-raising, and `_run()` maps the resulting `KeyboardInterrupt` to exit 130. Beyond those two, nothing is caught: an unexpected exception crashes loudly with its traceback, which is what you want while you are building.
 
 The protocol routes (`execute`/`start`/`runs/*`) surface a non-2xx as a raw `httpx.HTTPStatusError`, whose default string is useless (`Client error '400 Bad Request' for url …` + an MDN link). `piper/errors.py` instead reads the API's RFC 7807 **problem+json** body and shows the server's own `detail`, branching on the structured `error_type` (never the transport status) for the cases worth a hint — a `/start` against a synchronous-only runner (`StartRequiresAsyncOrchestration`) is presented with a hint pointing at `piper blocking`.
 
 The hints name the mode *groups*, because the fix for a failed run is usually another group: a blocking run that hit the ~30s cap tells you to rerun it with `piper attended`; a run that timed out while you waited tells you to resume it with `piper detached wait <id>`; a durable run against a runner that can't do them tells you to use `piper blocking`.
 
-**Every demo runs with zero arguments.** When you give neither an argument nor `--file`, the input helper returns a bundled sample (`piper/inputs.py`'s `SAMPLE_*` constants), and the command prints a one-line notice on stderr saying so. A fresh clone shows a working result on its very first command; stdout stays the clean, pipeable result because the notice is on stderr. Sample data is orthogonal to execution, so like input encoding it is shared, not duplicated per mode.
+**Every demo runs with zero arguments.** When you give neither an argument nor `--file`, the input helper returns a bundled sample (`piper/inputs.py`'s `SAMPLE_*` constants), and the command prints a one-line notice on stderr saying so. A fresh clone shows a working result on its very first command once your API key is set; stdout stays the clean, pipeable result because the notice is on stderr. Sample data is orthogonal to execution, so like input encoding it is shared, not duplicated per mode.
 
 ## Why `attended` and `detached`, not `durable`
 

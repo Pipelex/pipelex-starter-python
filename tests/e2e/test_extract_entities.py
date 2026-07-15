@@ -16,7 +16,7 @@ SAMPLE_TEXT = (
 class TestExtractEntities:
     async def test_blocking(self):
         # The blocking lifecycle end to end: one `execute` call, then narrow.
-        # Extraction finishes well under the hosted ~30s cap, so it is the demo blocking mode owns.
+        # Extraction finishes well under the hosted ~30s cap, so the blocking mode owns this demo.
         bundle = BUNDLE_PATH.read_text()
         main_stuff = await execute_pipe(pipe_code="extract_entities", bundle=bundle, inputs={"text": SAMPLE_TEXT})
         entities = ExtractedEntities.model_validate(main_stuff)
