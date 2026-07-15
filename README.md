@@ -155,8 +155,8 @@ flowchart TD
     classDef terminal fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a
 ```
 
-1. **Read the bundle.** `piper` reads `methods/extract-entities/main.mthds` from disk and constructs a `PipelexAPIClient`, which picks up `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` from the environment.
-2. **Run it on the API.** The bundle is sent as *content* (`mthds_contents`), so nothing method-specific needs to live in the runtime — edit the `.mthds` file and re-run, no redeploy.
+1. **Read the bundle.** `piper` reads `methods/extract-entities/main.mthds` from disk and constructs a `PipelexAPIClient`, which picks up `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` from the environment. A method dir may hold a single `main.mthds` or several `.mthds` files (a multi-file bundle split across pipes) — read them all with `[p.read_text() for p in sorted((METHODS_DIR / "<name>").glob("*.mthds"))]`.
+2. **Run it on the API.** The bundle's files are sent together as *content* (`mthds_contents`, one string per file), so nothing method-specific needs to live in the runtime — edit the `.mthds` file(s) and re-run, no redeploy.
 3. **Narrow the result.** The SDK resolves the run's `main_stuff`; the command validates it into the generated `ExtractedEntities` model (`ExtractedEntities.model_validate(main_stuff)`), printed as JSON.
 
 The typed models are **not hand-written**: they are generated from the `.mthds` bundles by `pipelex codegen` into `piper/generated/` (stamped, with a `codegen.lock` per method). Edit a bundle → `make codegen` regenerates the models and input templates → `make codegen-check` verifies offline that nothing is stale or hand-edited. See [docs/codegen.md](docs/codegen.md).
