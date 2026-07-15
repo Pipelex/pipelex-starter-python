@@ -449,12 +449,14 @@ def gather_target_files(root: Path, names: Names) -> list[Path]:
         root / "pyproject.toml",
         root / "README.md",
         root / "CLAUDE.md",
+        root / "Makefile",
         root / "LICENSE",
     ]
     pkg_dir = root / names.package
     candidates += sorted(pkg_dir.rglob("*.py"))
     candidates += sorted(pkg_dir.rglob("*.mthds"))
     candidates += sorted((root / "tests").rglob("*.py"))
+    candidates += sorted((root / "docs").rglob("*.md"))
     seen: set[Path] = set()
     files: list[Path] = []
     for path in candidates:
