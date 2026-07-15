@@ -1,6 +1,6 @@
 [project]
 name = "piper"
-version = "0.14.0"
+version = "0.14.1"
 description = "Replace this with your project description"
 # authors = [{ name = "Your Name", email = "your.email@example.com" }]
 license = "MIT"
@@ -50,7 +50,7 @@ piper = ["py.typed", "methods/*/main.mthds", "methods/*/inputs.template.json"]
 [project.optional-dependencies]
 dev = [
   "mypy==1.19.1",
-  "pipelex-tools>=0.3.2",
+  "pipelex-tools>=0.7.2",
   "pyright>=1.1.411",
   "pytest>=9.0.3",
   "pytest-mock>=3.14.0",

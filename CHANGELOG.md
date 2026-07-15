@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.14.1] - 2026-07-15
+
+- Bumped the `pipelex-tools` dev dependency from `>=0.3.2` to `>=0.7.2`.
+
 ## [v0.14.0] - 2026-07-15
 
 ### Added
