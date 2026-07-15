@@ -2,6 +2,7 @@
 
 ## [v0.14.1] - 2026-07-15
 
+- **Multi-file bundle support in the mode lifecycle helpers:** `execute_pipe`, `start_and_wait`, and `start_pipe` now take `mthds_contents: list[str]` (the bundle's `.mthds` files as strings — one entry for a single-file bundle, several for a multi-file one) instead of a single `bundle: str`, passed straight through to the SDK. Multi-file bundles cannot be concatenated into one string (duplicate top-level TOML keys), so the list is the interface. The three demos stay single-file (`mthds_contents=[bundle]`); a method dir with several `.mthds` files is read with `[p.read_text() for p in sorted((METHODS_DIR / "<name>").glob("*.mthds"))]`. The package-data glob broadens to `methods/*/*.mthds` so multi-file bundles ship.
 - Bumped the `pipelex-tools` dev dependency from `>=0.3.2` to `>=0.7.2`.
 
 ## [v0.14.0] - 2026-07-15

@@ -42,14 +42,15 @@ output_console = Console()
 progress_console = Console(stderr=True)
 
 
-async def start_pipe(*, pipe_code: str, bundle: str, inputs: dict[str, Any]) -> str:
+async def start_pipe(*, pipe_code: str, mthds_contents: list[str], inputs: dict[str, Any]) -> str:
     """The whole detached lifecycle: start a durable run, return its id, don't wait.
 
-    Credentials come from `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`. The run keeps
-    executing server-side after this process exits.
+    Credentials come from `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`. `mthds_contents` is the
+    bundle's `.mthds` files as strings — one entry for a single-file bundle, several for a
+    multi-file one. The run keeps executing server-side after this process exits.
     """
     async with PipelexAPIClient() as client:
-        start_result = await client.start(pipe_code=pipe_code, mthds_contents=[bundle], inputs=inputs)
+        start_result = await client.start(pipe_code=pipe_code, mthds_contents=mthds_contents, inputs=inputs)
     return start_result.pipeline_run_id
 
 
@@ -93,7 +94,7 @@ def extract_entities(
     if resolved.is_sample:
         progress_console.print(f"[dim]No text given — using the sample: {resolved.text!r}. Pass your own as an argument or via --file.[/dim]")
     bundle = (METHODS_DIR / "extract-entities" / "main.mthds").read_text()
-    run_id = _run(start_pipe(pipe_code="extract_entities", bundle=bundle, inputs={"text": resolved.text}))
+    run_id = _run(start_pipe(pipe_code="extract_entities", mthds_contents=[bundle], inputs={"text": resolved.text}))
     _print_run_id(run_id)
 
 
@@ -110,7 +111,7 @@ def summarize_pdf(
         progress_console.print(f"[dim]No file given — using the sample: {document.name}. Pass a path to summarize your own document.[/dim]")
     bundle = (METHODS_DIR / "summarize-pdf" / "main.mthds").read_text()
     inputs = {"document": build_document_input(document)}
-    run_id = _run(start_pipe(pipe_code="summarize_pdf", bundle=bundle, inputs=inputs))
+    run_id = _run(start_pipe(pipe_code="summarize_pdf", mthds_contents=[bundle], inputs=inputs))
     _print_run_id(run_id)
 
 
@@ -128,7 +129,7 @@ def generate_image(
     if resolved.is_sample:
         progress_console.print(f"[dim]No prompt given — using the sample: {resolved.text!r}. Pass your own as an argument or via --file.[/dim]")
     bundle = (METHODS_DIR / "generate-image" / "main.mthds").read_text()
-    run_id = _run(start_pipe(pipe_code="generate_image", bundle=bundle, inputs={"image_prompt": resolved.text}))
+    run_id = _run(start_pipe(pipe_code="generate_image", mthds_contents=[bundle], inputs={"image_prompt": resolved.text}))
     _print_run_id(run_id)
 
 

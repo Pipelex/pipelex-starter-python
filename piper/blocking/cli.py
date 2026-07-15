@@ -36,16 +36,18 @@ output_console = Console()
 progress_console = Console(stderr=True)
 
 
-async def execute_pipe(*, pipe_code: str, bundle: str, inputs: dict[str, Any]) -> Any:
+async def execute_pipe(*, pipe_code: str, mthds_contents: list[str], inputs: dict[str, Any]) -> Any:
     """The whole blocking lifecycle: one call, and the result comes back in the response.
 
-    Credentials come from `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`. The SDK resolves the
-    method's main output for you: `.main_stuff` is the content the pipe named as its
-    result (a completed run that names none raises `MissingMainStuffError`).
+    Credentials come from `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`. `mthds_contents` is the
+    bundle's `.mthds` files as strings — one entry for a single-file bundle, several for a
+    multi-file one. The SDK resolves the method's main output for you: `.main_stuff` is
+    the content the pipe named as its result (a completed run that names none raises
+    `MissingMainStuffError`).
     """
     async with PipelexAPIClient() as client:
         with progress_console.status("Running…"):
-            result = await client.execute(pipe_code=pipe_code, mthds_contents=[bundle], inputs=inputs)
+            result = await client.execute(pipe_code=pipe_code, mthds_contents=mthds_contents, inputs=inputs)
     return result.main_stuff
 
 
@@ -59,7 +61,7 @@ def extract_entities(
     if resolved.is_sample:
         progress_console.print(f"[dim]No text given — using the sample: {resolved.text!r}. Pass your own as an argument or via --file.[/dim]")
     bundle = (METHODS_DIR / "extract-entities" / "main.mthds").read_text()
-    main_stuff = _run(execute_pipe(pipe_code="extract_entities", bundle=bundle, inputs={"text": resolved.text}))
+    main_stuff = _run(execute_pipe(pipe_code="extract_entities", mthds_contents=[bundle], inputs={"text": resolved.text}))
     # Narrow into the generated typed model (validates the concept's shape), then print it as JSON.
     entities = ExtractedEntities.model_validate(main_stuff)
     output_console.print_json(data=entities.model_dump())
@@ -78,7 +80,7 @@ def summarize_pdf(
         progress_console.print(f"[dim]No file given — using the sample: {document.name}. Pass a path to summarize your own document.[/dim]")
     bundle = (METHODS_DIR / "summarize-pdf" / "main.mthds").read_text()
     inputs = {"document": build_document_input(document)}
-    main_stuff = _run(execute_pipe(pipe_code="summarize_pdf", bundle=bundle, inputs=inputs))
+    main_stuff = _run(execute_pipe(pipe_code="summarize_pdf", mthds_contents=[bundle], inputs=inputs))
     summary = DocumentSummary.model_validate(main_stuff)
     output_console.print_json(data=summary.model_dump())
 
@@ -98,7 +100,7 @@ def generate_image(
     if resolved.is_sample:
         progress_console.print(f"[dim]No prompt given — using the sample: {resolved.text!r}. Pass your own as an argument or via --file.[/dim]")
     bundle = (METHODS_DIR / "generate-image" / "main.mthds").read_text()
-    main_stuff = _run(execute_pipe(pipe_code="generate_image", bundle=bundle, inputs={"image_prompt": resolved.text}))
+    main_stuff = _run(execute_pipe(pipe_code="generate_image", mthds_contents=[bundle], inputs={"image_prompt": resolved.text}))
     # On the hosted path the runtime returns a storage `url` (`pipelex-storage://…`)
     # *and* a web-renderable `public_url` (a signed URL); the model keeps both.
     image = Image.model_validate(main_stuff)

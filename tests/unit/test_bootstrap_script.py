@@ -47,7 +47,7 @@ packages = [
 ]
 
 [tool.setuptools.package-data]
-piper = ["py.typed", "methods/*/main.mthds"]
+piper = ["py.typed", "methods/*/*.mthds"]
 "piper.generated.extract_entities" = ["codegen.lock"]
 
 [tool.ruff]

@@ -19,7 +19,7 @@ class TestSummarizePdf:
         # The attended lifecycle end to end: encode the PDF, start a durable run, poll it, narrow.
         bundle = BUNDLE_PATH.read_text()
         inputs = {"document": build_document_input(SAMPLE_PDF)}
-        main_stuff = await start_and_wait(pipe_code="summarize_pdf", bundle=bundle, inputs=inputs)
+        main_stuff = await start_and_wait(pipe_code="summarize_pdf", mthds_contents=[bundle], inputs=inputs)
         summary = DocumentSummary.model_validate(main_stuff)
         assert summary.title
         assert summary.doc_type

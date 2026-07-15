@@ -44,6 +44,8 @@ All three have the same four-part shape, so they diff cleanly:
 3. **The lifecycle helper** — one public async function that *is* the mode (`detached` adds the run-id lifecycle helpers described below). It gets a public name because it is the featured code, and it is what the unit tests patch and the e2e tests call directly.
 4. **The demo commands + a private `_run()`** — each command reads its input, reads its bundle, awaits the lifecycle helper through `_run()` (`asyncio.run` + the single `except (PipelineRequestError, httpx.HTTPStatusError)` that presents via `piper/errors.py`), narrows the result into its *generated* model, prints JSON.
 
+The lifecycle helpers take the bundle as `mthds_contents: list[str]` — one string per `.mthds` file — and pass it straight to the SDK. The three demos are single-file methods, so each reads its `main.mthds` and wraps it as `mthds_contents=[bundle]`. A method dir may instead hold several `.mthds` files (a multi-file bundle split across pipes with `signature_for` cross-file declarations); read them all with `[p.read_text() for p in sorted((METHODS_DIR / "<name>").glob("*.mthds"))]` and hand that list to the helper unchanged. Concatenating the files into one string would be invalid TOML — the list is the interface for exactly this reason.
+
 | Mode | Lifecycle helper | SDK calls | What the demo prints |
 | --- | --- | --- | --- |
 | `blocking` | `execute_pipe()` | `client.execute` | the result, as JSON |

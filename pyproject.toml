@@ -41,7 +41,7 @@ packages = [
 include-package-data = true
 
 [tool.setuptools.package-data]
-piper = ["py.typed", "methods/*/main.mthds", "methods/*/inputs.template.json"]
+piper = ["py.typed", "methods/*/*.mthds", "methods/*/inputs.template.json"]
 # Ship each codegen.lock alongside its models.py so `pipelex codegen check` works on an installed copy.
 "piper.generated.extract_entities" = ["codegen.lock"]
 "piper.generated.generate_image" = ["codegen.lock"]

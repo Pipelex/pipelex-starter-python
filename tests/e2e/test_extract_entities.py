@@ -18,6 +18,6 @@ class TestExtractEntities:
         # The blocking lifecycle end to end: one `execute` call, then narrow.
         # Extraction finishes well under the hosted ~30s cap, so the blocking mode owns this demo.
         bundle = BUNDLE_PATH.read_text()
-        main_stuff = await execute_pipe(pipe_code="extract_entities", bundle=bundle, inputs={"text": SAMPLE_TEXT})
+        main_stuff = await execute_pipe(pipe_code="extract_entities", mthds_contents=[bundle], inputs={"text": SAMPLE_TEXT})
         entities = ExtractedEntities.model_validate(main_stuff)
         assert any("Curie" in person for person in entities.people)
