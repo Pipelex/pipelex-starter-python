@@ -168,10 +168,10 @@ The other demos run through the exact same path — they differ only in their in
 **The mode is the command group, not an option.** There are three, and every demo runs in all three:
 
 ```bash
-uv run piper blocking  extract-entities | summarize-pdf | generate-image
-uv run piper attended  extract-entities | summarize-pdf | generate-image
-uv run piper detached  extract-entities | summarize-pdf | generate-image
-uv run piper detached  wait | status | result   <run-id>
+uv run piper blocking  extract-entities     # or summarize-pdf, generate-image
+uv run piper attended  extract-entities     # or summarize-pdf, generate-image
+uv run piper detached  extract-entities     # or summarize-pdf, generate-image
+uv run piper detached  wait <run-id>        # or status, result
 ```
 
 Read them in that order — each one is a single self-contained file (`piper/<mode>/cli.py`) you can copy straight into your own project.

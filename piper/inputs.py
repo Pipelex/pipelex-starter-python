@@ -51,12 +51,16 @@ def read_text_input(*, text: str | None, file: Path | None, sample: str) -> Text
     command runs with no arguments at all.
 
     Raises:
-        typer.BadParameter: both an argument and `--file` were given.
+        typer.BadParameter: both an argument and `--file` were given, or `--file`
+            does not point at a readable file.
     """
     if text is not None and file is not None:
         msg = "Give the text either as an argument or via --file, not both."
         raise typer.BadParameter(msg)
     if file is not None:
+        if not file.is_file():
+            msg = f"No such file: {file}"
+            raise typer.BadParameter(msg)
         return TextInput(text=file.read_text(), is_sample=False)
     if text is not None:
         return TextInput(text=text, is_sample=False)

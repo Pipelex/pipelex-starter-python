@@ -75,11 +75,30 @@ include = ["piper", "tests"]
     (root / "tests" / "test_cli.py").write_text("from piper.cli import app\n", encoding="utf-8")
 
 
+def test_validate_package_rejects_placeholder_colliding_names() -> None:
+    # A package like `piper_tools` re-matches the placeholder regex after its own
+    # insertion (piper_tools -> piper_tools_tools in pyproject), so it is refused
+    # up front instead of producing a corrupted, non-building project.
+    bootstrap = load_bootstrap()
+
+    with pytest.raises(SystemExit) as exc_info:
+        bootstrap.validate_package("piper_tools")
+
+    assert "piper" in str(exc_info.value)
+
+
+def test_validate_package_allows_names_embedding_piper() -> None:
+    # No word boundary before "piper" here, so it never collides with the placeholder.
+    bootstrap = load_bootstrap()
+
+    bootstrap.validate_package("sandpiper_tools")
+
+
 def test_survivor_check_allows_requested_values_containing_piper(tmp_path: Path) -> None:
     bootstrap = load_bootstrap()
     write_template(tmp_path)
 
-    names = bootstrap.Names(dist="piper-tools", package="piper_tools", title="Piper Tools")
+    names = bootstrap.Names(dist="sandpiper-tools", package="sandpiper_tools", title="Sandpiper Tools")
     opts = bootstrap.Options(
         description="Build Piper workflows",
         author_name="Piper Team",

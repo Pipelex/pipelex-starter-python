@@ -3,8 +3,9 @@
 `client.start(...)` submits the run server-side (it survives anything, including
 the ~30s cap that kills `piper blocking`), and `client.wait_for_result(...)` polls
 it to completion from this terminal. The run id is printed *before* polling starts,
-so a Ctrl-C never loses the run: it keeps executing server-side and you resume it
-with `piper detached wait <id>`.
+so once you see it, a Ctrl-C doesn't lose the run: it keeps executing server-side and
+you resume it with `piper detached wait <id>`. (A Ctrl-C while the start request is
+still in flight is the one window with no id to resume from.)
 
 The SDK also offers `start_and_wait()`, a self-healing one-liner that picks the
 right path by itself — that is the production shortcut. This starter spells the

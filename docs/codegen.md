@@ -38,8 +38,8 @@ PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen
 PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen-check
 ```
 
-Once a released `pipelex` ships `codegen`, `codegen-check` is meant to run in CI so a bundle edit can never land without its regenerated client.
+Once a released `pipelex` ships `codegen`, `codegen-check` is meant to run in CI to catch stale, hand-edited, or orphaned generated artifacts. It does not resolve bundles, so a bundle edit that was never regenerated still needs the other guard: run `make codegen` and fail on a dirty `git diff` (see above).
 
 ## Offline test floor
 
-`tests/unit/test_generated_clients.py` runs everywhere (no pipelex CLI, no API key): it checks the generated modules import, carry the stamp + lock, round-trip their own serialization, and that each committed input template names exactly the inputs the CLI passes — so a regenerated template that no longer matches what `piper/<mode>/cli.py` sends fails in CI even before `codegen-check` is wired in.
+`tests/unit/test_generated_clients.py` runs everywhere (no pipelex CLI, no API key): it checks the generated modules import, carry the stamp + lock, round-trip their own serialization, and that each committed input template names exactly the inputs of the test's checked-in contract (its `METHODS` map, which mirrors the inputs each `piper/<mode>/cli.py` sends) — so a regenerated template that drifts from that contract fails in CI even before `codegen-check` is wired in.

@@ -81,6 +81,14 @@ def validate_package(package: str) -> None:
         )
     if keyword.iskeyword(package):
         sys.exit(f"Invalid package name {package!r}: it is a Python keyword.")
+    # A name like `piper_tools` re-matches the placeholder regex after its own
+    # insertion (the pyproject transform would corrupt it into `piper_tools_tools`),
+    # so refuse it up front. Names merely embedding the token (e.g. `sandpiper`)
+    # have no word boundary before `piper` and stay allowed.
+    if PIPER_PACKAGE_RE.search(package):
+        sys.exit(
+            f"Invalid package name {package!r}: it collides with the template's 'piper' placeholder — pick a name that doesn't start with 'piper_'."
+        )
 
 
 def validate_dist(dist: str) -> None:
