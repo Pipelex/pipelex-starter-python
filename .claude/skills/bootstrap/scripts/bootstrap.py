@@ -81,6 +81,14 @@ def validate_package(package: str) -> None:
         )
     if keyword.iskeyword(package):
         sys.exit(f"Invalid package name {package!r}: it is a Python keyword.")
+    # A name like `piper_tools` re-matches the placeholder regex after its own
+    # insertion (the pyproject transform would corrupt it into `piper_tools_tools`),
+    # so refuse it up front. Names merely embedding the token (e.g. `sandpiper`)
+    # have no word boundary before `piper` and stay allowed.
+    if PIPER_PACKAGE_RE.search(package):
+        sys.exit(
+            f"Invalid package name {package!r}: it collides with the template's 'piper' placeholder — pick a name that doesn't start with 'piper_'."
+        )
 
 
 def validate_dist(dist: str) -> None:
@@ -239,27 +247,30 @@ def transform_pyproject(text: str, names: Names, opts: "Options") -> str:
     else:
         text = text.replace(f"yourusername/{TEMPLATE_NAME}", f"yourusername/{names.dist}")
 
-    # Name tokens: targeted per-key edits rather than the character-after pass,
-    # because a package name sitting bare in a TOML array (`packages = ["piper"]`)
-    # or as a bare table key looks like a command position to the generic
-    # heuristic. Each occurrence is edited by its key; the post-run assertion in
-    # run() is the backstop that catches any key not handled here.
+    # Name tokens: targeted edits rather than the character-after pass, because
+    # a package name sitting bare in a TOML array (`packages = ["piper"]`) or as
+    # a bare table key looks like a command position to the generic heuristic.
+    # The name-bearing keys are edited by key first; the post-run assertion in
+    # run() is the backstop that catches any occurrence not handled here.
     key_edits = {
         # [project].name -> distribution name
         f'name = "{TEMPLATE_NAME}"': f"name = {toml_str(names.dist)}",
         # [project.scripts]: <dist-command> = "<package>.cli:app"
         f'{TEMPLATE_NAME} = "{TEMPLATE_NAME}.cli:app"': f'{names.dist} = "{names.package}.cli:app"',
-        # [tool.setuptools] packages (import names)
-        f'packages = ["{TEMPLATE_NAME}", "{TEMPLATE_NAME}.examples"]': f'packages = ["{names.package}", "{names.package}.examples"]',
-        # [tool.setuptools.package-data] table key (import name)
+        # [tool.setuptools.package-data] bare table key (import name)
         f'{TEMPLATE_NAME} = ["py.typed"': f'{names.package} = ["py.typed"',
-        # [tool.mypy] packages (import name)
-        f'packages = ["{TEMPLATE_NAME}"]': f'packages = ["{names.package}"]',
-        # [tool.pyright] include (import name)
-        f'include = ["{TEMPLATE_NAME}", "tests"]': f'include = ["{names.package}", "tests"]',
     }
     for old_text, new_text in key_edits.items():
         text = text.replace(old_text, new_text)
+    # Everything left is the package (import/path) form: quoted-exact array
+    # entries ("piper" in [tool.setuptools] packages / [tool.mypy] / [tool.pyright]),
+    # and dotted/path positions (the "piper.generated.*" package + package-data
+    # entries, the "piper/generated" ruff exclude, prose comments about
+    # piper/methods/*). The name-bearing keys above have already been rewritten,
+    # so the quoted-exact replace plus the package-position rule cover the rest —
+    # and neither goes stale when a package is added to or removed from an array.
+    text = text.replace(f'"{TEMPLATE_NAME}"', f'"{names.package}"')
+    text = PIPER_PACKAGE_RE.sub(names.package, text)
     return text
 
 
@@ -438,12 +449,14 @@ def gather_target_files(root: Path, names: Names) -> list[Path]:
         root / "pyproject.toml",
         root / "README.md",
         root / "CLAUDE.md",
+        root / "Makefile",
         root / "LICENSE",
     ]
     pkg_dir = root / names.package
     candidates += sorted(pkg_dir.rglob("*.py"))
     candidates += sorted(pkg_dir.rglob("*.mthds"))
     candidates += sorted((root / "tests").rglob("*.py"))
+    candidates += sorted((root / "docs").rglob("*.md"))
     seen: set[Path] = set()
     files: list[Path] = []
     for path in candidates:

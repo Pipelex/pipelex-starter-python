@@ -1,5 +1,34 @@
 # Changelog
 
+## [v0.14.0] - 2026-07-15
+
+### Added
+
+- **Zero-argument demo fallbacks:** every demo now runs with zero arguments, falling back to a built-in sample (e.g. `samples/sample-invoice.pdf` for `summarize-pdf`) and printing a notice to stderr, so stdout stays pipeable and a fresh clone shows a working result on the first command. `read_text_input()` gains a `sample` parameter and returns a `TextInput(text, is_sample)`.
+- **Generated typed clients:** output models are now generated from `.mthds` bundles into `piper/generated/` via `pipelex codegen`, replacing hand-written models (`generate-image` now parses into the generated `Image` model, replacing the hand-written `GeneratedImage`). Added `make codegen` to regenerate clients and templates, and `make codegen-check` to verify offline (via hashing against each `codegen.lock`) that generated clients are up to date. Each `codegen.lock` ships as package data, so the check also works against an installed (wheel) copy, not just a git checkout.
+- **New documentation:** added `docs/cli-architecture.md`, describing the copy-paste CLI layout, and `docs/codegen.md`, explaining the generated-models workflow.
+- **Offline smoke tests:** added `tests/unit/test_generated_clients.py` to verify generated modules import correctly, carry the stamp + lock, round-trip their serialization, and match the committed input templates to the CLI's inputs; and `tests/unit/test_mode_symmetry.py` to guard against drift between CLI modes.
+- **Bootstrap validation:** `/bootstrap` now rejects package names that collide with the template's `piper` placeholder (e.g. `piper_tools`, which would corrupt into `piper_tools_tools` under the pyproject transform).
+
+### Changed
+
+- **Execution mode is now the command group, not an option (Breaking):** `--mode`, `--detach`, and the `PIPELEX_EXECUTION_MODE` env var are gone — invoke the mode explicitly: `piper blocking <demo>`, `piper attended <demo>`, or `piper detached <demo>`. The top-level `runs` command moves under detached mode (`piper detached status|result|wait <id>`). There is no default mode anymore; the mode is explicit in every invocation, which is itself the lesson. The middle mode is named `attended`, not `durable`, because detached runs are durable too — the axis the names describe is who waits.
+- **Typed `Image` dimensions (Breaking):** the generated `Image` model now uses optional integer `width` and `height` fields instead of an untyped `size` dict, with native field descriptions sourced from the standard's pinned definitions. Regenerated all committed clients (stamps, locks, and fingerprints updated).
+- **CLI architecture:** each execution mode is now a self-contained, copy-paste unit (`piper/<mode>/cli.py`) with its own commands, SDK lifecycle helper (`execute_pipe` / `start_and_wait` / `start_pipe`), and progress rendering; lifecycle code is no longer shared. Only mode-orthogonal code remains shared: `piper/inputs.py` (text/file inputs and document envelopes — `piper/file_input.py` is merged into it) and `piper/errors.py`, whose hints now name the mode groups (a blocking run that hits the ~30s cap points at `piper attended`; an interrupted attended run points at `piper detached wait <id>`).
+- **Structured HTTP errors:** protocol-route HTTP errors now parse and surface the API's RFC 7807 `problem+json` body (`title`, `detail`, machine `error_type`) instead of httpx's stringification, with hints pointing to the correct CLI mode based on error type (e.g. `StartRequiresAsyncOrchestration` points at `piper blocking`).
+- **E2E tests:** end-to-end tests now call the mode lifecycle helpers directly, with one execution mode per demo (`extract-entities` → blocking, `summarize-pdf` → attended, `generate-image` → detached) for full matrix coverage.
+- `piper/generated` is excluded from ruff (reformatting generated files would trip the drift check) but remains fully type-checked.
+
+### Fixed
+
+- **Bootstrap `pyproject.toml` transform:** `/bootstrap` now rewrites `pyproject.toml` using generic, context-aware rules (quoted-exact and dotted/path positions) instead of per-key edits, preventing staleness as the package list changes, and correctly handles the multi-line `packages` array with the `piper.generated.*` subpackages, quoted package-data keys, and the `piper/generated` ruff exclude.
+
+### Removed
+
+- **Dispatch layer:** removed `piper/runner.py`, the central `_dispatch()` chain, and the `ExecutionMode` enum, in favor of the self-contained mode CLIs; `piper/cli.py` shrinks to a `load_dotenv` callback plus three `add_typer` calls.
+- **`piper/examples/` layer:** removed the per-demo wrapper modules; demo logic and inline model narrowing (`Model.model_validate(main_stuff)`) now live directly in the mode CLI files. The `parse()` unit tests went with it (they only exercised pydantic's `model_validate`).
+- **`piper/file_input.py`:** merged into the new shared `piper/inputs.py` module.
+
 ## [v0.13.0] - 2026-07-07
 
 - **Breaking:** renamed the starter's placeholder project from `my-project` / `my_project` / `My Project` to `piper` / `Piper`. The console command is now `uv run piper ...`, the template package is `piper/`, `pyproject.toml` points at `piper.cli:app`, and the e2e extract-entities test file no longer carries the project placeholder in its name.

@@ -3,11 +3,17 @@ from pathlib import Path
 import pytest
 from pipelex_sdk.client import PipelexAPIClient
 
-from piper.examples.extract_entities import BUNDLE_PATH as EXTRACT_ENTITIES_BUNDLE
-from piper.examples.generate_image import BUNDLE_PATH as GENERATE_IMAGE_BUNDLE
-from piper.examples.summarize_pdf import BUNDLE_PATH as SUMMARIZE_PDF_BUNDLE
+import piper
 
-BUNDLE_PATHS = [EXTRACT_ENTITIES_BUNDLE, SUMMARIZE_PDF_BUNDLE, GENERATE_IMAGE_BUNDLE]
+# The bundles ship with the package. Each mode CLI resolves them the same way
+# (`METHODS_DIR` in `piper/<mode>/cli.py`), so this check stays mode-agnostic.
+METHODS_DIR = Path(piper.__file__).parent / "methods"
+
+BUNDLE_PATHS = [
+    METHODS_DIR / "extract-entities" / "main.mthds",
+    METHODS_DIR / "summarize-pdf" / "main.mthds",
+    METHODS_DIR / "generate-image" / "main.mthds",
+]
 
 
 class TestFundamentals:

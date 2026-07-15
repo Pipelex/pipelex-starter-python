@@ -71,7 +71,7 @@ The dry run prints the package-directory rename and the list of files that would
 
 Re-run the exact same command **without** `--dry-run`. The script:
 - renames `piper/` → `<package>/` (via `git mv`, so history follows). The e2e test file is named after its demo (`tests/e2e/test_extract_entities.py`), not the project, so nothing in `tests/` is renamed — only its contents are edited.
-- substitutes the name across `pyproject.toml`, `README.md`, `CLAUDE.md`, the package's `.py`/`.mthds` files, and the tests — using context-aware rules: the dash dist form in CLI-command / distribution positions, the underscore package form in imports and paths, the title in prose. `pyproject.toml` is handled with targeted per-key edits (its package-list arrays need the package form in a bare-string position). It then asserts no placeholder token survived, and aborts with the offending locations if one did.
+- substitutes the name across `pyproject.toml`, `README.md`, `CLAUDE.md`, the `Makefile` (the codegen targets point at `<package>/generated` and `<package>/methods` paths), the package's `.py`/`.mthds` files, the tests, and the docs under `docs/` — using context-aware rules: the dash dist form in CLI-command / distribution positions, the underscore package form in imports and paths, the title in prose. `pyproject.toml` is handled with targeted per-key edits (its package-list arrays need the package form in a bare-string position). It then asserts no placeholder token survived, and aborts with the offending locations if one did.
 - fills in description, and (if given) author, repo URL
 - applies the license choice in all three places: the `LICENSE` body, `license = "..."` in `pyproject.toml`, and the README license line
 - strips the README template block
