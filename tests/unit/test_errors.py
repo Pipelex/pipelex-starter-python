@@ -3,10 +3,14 @@ from collections.abc import Mapping
 import httpx
 from pipelex_sdk.errors import (
     ApiUnreachableError,
+    InvalidLocalSourceError,
     PipelineExecuteTimeoutError,
+    RejectedAssetError,
     RunFailedError,
     RunLifecycleUnavailableError,
     RunTimeoutError,
+    UnsupportedUploadCapabilityError,
+    UploadAuthenticationError,
 )
 from pipelex_sdk.runs import RunStatus
 
@@ -90,3 +94,25 @@ class TestPresentError:
         presentation = present_error(RunTimeoutError("too slow", run_id="run-9", timeout_seconds=1200.0))
         assert presentation.hint is not None
         assert "piper detached wait run-9" in presentation.hint
+
+    def test_unsupported_upload_capability_hints_the_hosted_api(self):
+        # summarize-pdf uploads the file; a runner without /v1/upload must point at the hosted API.
+        presentation = present_error(UnsupportedUploadCapabilityError("no /v1/upload route here"))
+        assert "no /v1/upload route here" in presentation.message
+        assert presentation.hint is not None
+        assert "PIPELEX_BASE_URL" in presentation.hint
+
+    def test_upload_authentication_hints_api_key(self):
+        presentation = present_error(UploadAuthenticationError("not authorized (401)", status=401))
+        assert presentation.hint is not None
+        assert "PIPELEX_API_KEY" in presentation.hint
+
+    def test_rejected_asset_hints_a_smaller_file(self):
+        presentation = present_error(RejectedAssetError("too large", filename="huge.pdf", status=413))
+        assert presentation.hint is not None
+        assert "smaller" in presentation.hint
+
+    def test_invalid_local_source_hints_the_path(self):
+        presentation = present_error(InvalidLocalSourceError("cannot read", source="/nope.pdf"))
+        assert presentation.hint is not None
+        assert "path" in presentation.hint

@@ -283,7 +283,7 @@ wheels = [
 
 [[package]]
 name = "pipelex-sdk"
-version = "0.4.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -291,9 +291,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/46/ee/463270b47a166001a8875af968cdce4619e5815510066eaf6be8fc6d17d6/pipelex_sdk-0.4.0.tar.gz", hash = "sha256:c11200cab8141e1d315e530dca9ef8a1fe32371c86d4f8cb56fc1fd39952188f", size = 111049, upload-time = "2026-07-06T21:37:34.046Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a3/19/ae26f50b47c53c328942e0d19b2caa457b0f82e4250685f4399d26f7d476/pipelex_sdk-0.5.0.tar.gz", hash = "sha256:b83a81c2f27b729d0f995f1ef99a009dcdd5dd0c472c901c8392cc0790290d63", size = 139941, upload-time = "2026-07-22T14:54:33.223Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/b5/ce14f9bbb9717a193c6e180b8c945c132d4bc53bdcd439849de456549a01/pipelex_sdk-0.4.0-py3-none-any.whl", hash = "sha256:af4f0502cf8ef592df7d5eb26c9512491d5d35d4e31721877aaea9364856f99a", size = 33166, upload-time = "2026-07-06T21:37:32.575Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/f5/ce84b165fc410aec2275a9e5e4c1800a9799d69c26b7f5f707bb2d754ae4/pipelex_sdk-0.5.0-py3-none-any.whl", hash = "sha256:13bfd9b280737e32b7d7227fd9a27517b9a498483e810bce0201dd27696d10cd", size = 44078, upload-time = "2026-07-22T14:54:32.006Z" },
 ]
 
 [[package]]
@@ -338,7 +338,7 @@ dev = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.19.1" },
-    { name = "pipelex-sdk", specifier = ">=0.4.0" },
+    { name = "pipelex-sdk", specifier = ">=0.5.0" },
     { name = "pipelex-tools", marker = "extra == 'dev'", specifier = ">=0.7.2" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.411" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },

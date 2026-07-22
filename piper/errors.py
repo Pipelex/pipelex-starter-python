@@ -20,10 +20,15 @@ from mthds.protocol.exceptions import PipelineRequestError
 from pipelex_sdk.errors import (
     ApiResponseError,
     ApiUnreachableError,
+    InputPreparationError,
+    InvalidLocalSourceError,
     PipelineExecuteTimeoutError,
+    RejectedAssetError,
     RunFailedError,
     RunLifecycleUnavailableError,
     RunTimeoutError,
+    UnsupportedUploadCapabilityError,
+    UploadAuthenticationError,
 )
 
 
@@ -79,7 +84,26 @@ def present_error(exc: PipelineRequestError | httpx.HTTPStatusError) -> ErrorPre
             message=f"Gave up waiting for run {exc.run_id} after {exc.timeout_seconds:.0f}s — the run is still executing server-side.",
             hint=f"Resume waiting with `piper detached wait {exc.run_id}`.",
         )
+    # File upload (summarize-pdf) preparation errors — raised before any run is created.
+    if isinstance(exc, InputPreparationError):
+        return _present_upload_error(exc)
     return ErrorPresentation(message=str(exc), hint=None)
+
+
+def _present_upload_error(exc: InputPreparationError) -> ErrorPresentation:
+    """Present a file-upload (input-preparation) failure. The SDK already gives each a clear
+    message; here we add the actionable hint per semantic category."""
+    if isinstance(exc, UnsupportedUploadCapabilityError):
+        hint = "File upload is a hosted capability — point PIPELEX_BASE_URL at https://api.pipelex.com (a bare runner may not serve /v1/upload)."
+    elif isinstance(exc, UploadAuthenticationError):
+        hint = "Set PIPELEX_API_KEY in your environment or .env file — get a key at https://app.pipelex.com"
+    elif isinstance(exc, RejectedAssetError):
+        hint = "The server rejected the file (usually past the service size cap) — try a smaller file."
+    elif isinstance(exc, InvalidLocalSourceError):
+        hint = "Check the path points at a readable file."
+    else:
+        hint = "Check PIPELEX_BASE_URL and that the API is reachable."
+    return ErrorPresentation(message=str(exc), hint=hint)
 
 
 def _present_http_status_error(exc: httpx.HTTPStatusError) -> ErrorPresentation:

@@ -8,22 +8,25 @@ Two shapes cover the demos:
 
 - `read_text_input()` — a text argument, a `--file` pointing at one, or (when you
   give neither) a built-in sample, so every demo runs with zero arguments.
-- `build_document_input()` — a local file, base64-encoded into a `data:` URL and
-  wrapped in the `Document` envelope the API expects: `{"concept": "Document",
-  "content": {"url": ..., "filename": ..., "mime_type": ...}}`. The API decodes
-  it server-side and uploads it to storage, so the CLI never has to host the file
-  itself. This mirrors `buildDocumentInput` in the JS starter's `fileEncoding.ts`.
+- `upload_document_input()` — a local file, uploaded to hosted Pipelex storage with
+  `client.upload_file`, then wrapped in the `Document` envelope the API expects:
+  `{"concept": "Document", "content": {"url": <pipelex-storage:// URI>, "filename":
+  ..., "mime_type": ...}}`. A hosted run cannot see your filesystem, so the file is
+  uploaded first and the run request carries only the URI, never the bytes. Preparation
+  is deliberately a separate step from running: a file error surfaces before any run
+  exists, and the uploaded asset is reusable across retries and modes. The pure
+  `build_document_input(path, uri)` assembles the envelope once the URI is known.
 
 The built-in samples let a fresh clone show a working result before you have any
 input of your own; they are also the values the README documents.
 """
 
-import base64
 import mimetypes
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import typer
+from pipelex_sdk.client import PipelexAPIClient
 
 DEFAULT_MIME_TYPE = "application/octet-stream"
 
@@ -67,20 +70,33 @@ def read_text_input(*, text: str | None, file: Path | None, sample: str) -> Text
     return TextInput(text=sample, is_sample=True)
 
 
-def build_document_input(path: Path) -> dict[str, Any]:
-    """Read a file from disk and build its `Document` input envelope.
+def build_document_input(path: Path, uri: str) -> dict[str, Any]:
+    """Build the `Document` input envelope for an already-uploaded asset.
 
-    The bytes are base64-encoded into a `data:` URL; the MIME type is guessed
-    from the extension (falling back to `application/octet-stream`).
-
-    Raises:
-        FileNotFoundError: `path` does not point at a readable file.
+    `uri` is the `pipelex-storage://` reference `client.upload_file` returned for the file;
+    the envelope carries that URI (not the bytes). The MIME type is guessed from the
+    extension (falling back to `application/octet-stream`). Pure and offline — the upload
+    itself happens in `upload_document_input`.
     """
-    data = path.read_bytes()
     mime_type = mimetypes.guess_type(path.name)[0] or DEFAULT_MIME_TYPE
-    encoded = base64.b64encode(data).decode("ascii")
-    data_url = f"data:{mime_type};base64,{encoded}"
     return {
         "concept": "Document",
-        "content": {"url": data_url, "filename": path.name, "mime_type": mime_type},
+        "content": {"url": uri, "filename": path.name, "mime_type": mime_type},
     }
+
+
+async def upload_document_input(path: Path) -> dict[str, Any]:
+    """Upload a local document to hosted Pipelex storage and build its `Document` input envelope.
+
+    A hosted run cannot read your filesystem, so a local file is uploaded first:
+    `client.upload_file` stores it and returns a `pipelex-storage://` URI, which the envelope
+    references — the run request never carries the file's bytes. Credentials come from
+    `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`.
+
+    Upload is a hosted Pipelex capability; a deployment without it raises
+    `UnsupportedUploadCapabilityError`, and an unreadable path raises `InvalidLocalSourceError`
+    (both descend from `PipelineRequestError`, so the mode's `_run()` presents them cleanly).
+    """
+    async with PipelexAPIClient() as client:
+        record = await client.upload_file(path)
+    return build_document_input(path, record.uri)
