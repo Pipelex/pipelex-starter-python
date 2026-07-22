@@ -4,8 +4,8 @@ The simplest way to run a method: `client.execute(...)` and you have the result.
 Behind the hosted gateway a run longer than ~30s is cut off (run `generate-image`
 to see it happen) — that is what `piper attended` and `piper detached` are for.
 
-Copy-paste unit: this file + `piper/inputs.py` + `piper/errors.py`. The three mode
-packages never share lifecycle code, so the demo commands below are deliberate
+Copy-paste unit: this file + `piper/inputs.py` + `piper/errors.py` + `piper/usage.py`. The
+three mode packages never share lifecycle code, so the demo commands below are deliberate
 mirrors of their `attended` / `detached` twins: only `execute_pipe()` differs.
 """
 
@@ -23,7 +23,8 @@ from piper.errors import present_error
 from piper.generated.extract_entities.models import ExtractedEntities
 from piper.generated.generate_image.models import Image
 from piper.generated.summarize_pdf.models import DocumentSummary
-from piper.inputs import SAMPLE_ENTITIES_TEXT, SAMPLE_IMAGE_PROMPT, SAMPLE_INVOICE, build_document_input, read_text_input
+from piper.inputs import SAMPLE_ENTITIES_TEXT, SAMPLE_IMAGE_PROMPT, SAMPLE_INVOICE, read_text_input, upload_document_input
+from piper.usage import RunUsage, print_cost_report, usage_from_execute
 
 ResultT = TypeVar("ResultT")
 
@@ -36,19 +37,20 @@ output_console = Console()
 progress_console = Console(stderr=True)
 
 
-async def execute_pipe(*, pipe_code: str, mthds_contents: list[str], inputs: dict[str, Any]) -> Any:
+async def execute_pipe(*, pipe_code: str, mthds_contents: list[str], inputs: dict[str, Any]) -> tuple[Any, RunUsage]:
     """The whole blocking lifecycle: one call, and the result comes back in the response.
 
     Credentials come from `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`. `mthds_contents` is the
     bundle's `.mthds` files as strings — one entry for a single-file bundle, several for a
     multi-file one. The SDK resolves the method's main output for you: `.main_stuff` is
     the content the pipe named as its result (a completed run that names none raises
-    `MissingMainStuffError`).
+    `MissingMainStuffError`). Alongside it we return the run's `RunUsage` — the per-call
+    cost/token records the command prints as a cost report.
     """
     async with PipelexAPIClient() as client:
         with progress_console.status("Running…"):
             result = await client.execute(pipe_code=pipe_code, mthds_contents=mthds_contents, inputs=inputs)
-    return result.main_stuff
+    return result.main_stuff, usage_from_execute(result)
 
 
 @app.command(name="extract-entities")
@@ -61,10 +63,11 @@ def extract_entities(
     if resolved.is_sample:
         progress_console.print(f"[dim]No text given — using the sample: {resolved.text!r}. Pass your own as an argument or via --file.[/dim]")
     bundle = (METHODS_DIR / "extract-entities" / "main.mthds").read_text()
-    main_stuff = _run(execute_pipe(pipe_code="extract_entities", mthds_contents=[bundle], inputs={"text": resolved.text}))
+    main_stuff, usage = _run(execute_pipe(pipe_code="extract_entities", mthds_contents=[bundle], inputs={"text": resolved.text}))
     # Narrow into the generated typed model (validates the concept's shape), then print it as JSON.
     entities = ExtractedEntities.model_validate(main_stuff)
     output_console.print_json(data=entities.model_dump())
+    print_cost_report(progress_console, usage)
 
 
 @app.command(name="summarize-pdf")
@@ -79,10 +82,12 @@ def summarize_pdf(
     if file is None:
         progress_console.print(f"[dim]No file given — using the sample: {document.name}. Pass a path to summarize your own document.[/dim]")
     bundle = (METHODS_DIR / "summarize-pdf" / "main.mthds").read_text()
-    inputs = {"document": build_document_input(document)}
-    main_stuff = _run(execute_pipe(pipe_code="summarize_pdf", mthds_contents=[bundle], inputs=inputs))
+    # Upload the file first (a separate step from the run) — the run request carries only its URI.
+    inputs = {"document": _run(upload_document_input(document))}
+    main_stuff, usage = _run(execute_pipe(pipe_code="summarize_pdf", mthds_contents=[bundle], inputs=inputs))
     summary = DocumentSummary.model_validate(main_stuff)
     output_console.print_json(data=summary.model_dump())
+    print_cost_report(progress_console, usage)
 
 
 @app.command(name="generate-image")
@@ -100,11 +105,12 @@ def generate_image(
     if resolved.is_sample:
         progress_console.print(f"[dim]No prompt given — using the sample: {resolved.text!r}. Pass your own as an argument or via --file.[/dim]")
     bundle = (METHODS_DIR / "generate-image" / "main.mthds").read_text()
-    main_stuff = _run(execute_pipe(pipe_code="generate_image", mthds_contents=[bundle], inputs={"image_prompt": resolved.text}))
+    main_stuff, usage = _run(execute_pipe(pipe_code="generate_image", mthds_contents=[bundle], inputs={"image_prompt": resolved.text}))
     # On the hosted path the runtime returns a storage `url` (`pipelex-storage://…`)
     # *and* a web-renderable `public_url` (a signed URL); the model keeps both.
     image = Image.model_validate(main_stuff)
     output_console.print_json(data=image.model_dump())
+    print_cost_report(progress_console, usage)
 
 
 def _run(coro: Coroutine[Any, Any, ResultT]) -> ResultT:
