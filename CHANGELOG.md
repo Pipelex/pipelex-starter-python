@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.15.0] - 2026-07-22
+
+### Added
+
+- **Cost reports on every run.** Each result-producing command now prints a per-call cost report (pipe, model, tokens in→out, USD cost, and a total) to stderr, after the JSON result on stdout. A new shared `piper/usage.py` reads the run's per-call usage off the SDK result into a `RunUsage` (`usage_from_results` for the durable modes' typed `RunResults.tokens_usages`; `usage_from_execute` for blocking, which lifts the same records off its execute result) and renders it with `print_cost_report`. It respects the SDK's usage semantics: an unpriced call (`cost is None` — mock / own-GPU / dry-run) is excluded from the total rather than counted as zero, and token categories are never summed. Detached prints the report from `wait` / `result` (collection time), not from the start-only demo commands.
+
+### Changed
+
+- **Cleaner file upload for `summarize-pdf` (breaking):** the document is now uploaded to hosted storage up front with `client.upload_file` (new `inputs.upload_document_input`), and the run request carries only the returned `pipelex-storage://` URI — replacing the previous inline base64 `data:` URL. `inputs.build_document_input` becomes the pure envelope builder `build_document_input(path, uri)`; the upload is a separate step, so a file or capability error surfaces before any run is created. `piper/errors.py` gains hints for the file-upload error family (unsupported capability, rejected asset, authentication, invalid local source).
+- **Lifecycle helpers return `(main_stuff, RunUsage)` (breaking):** `execute_pipe`, `start_and_wait`, and detached's `attend_run` now return the resolved main output *and* the run's usage, instead of `main_stuff` alone, so the commands can print the cost report. The demo commands unpack the pair; the SDK output accessor itself is unchanged.
+- Bumped the `pipelex-sdk` floor from `>=0.4.0` to `>=0.5.0` (for `upload_file` and typed run usage).
+
 ## [v0.14.1] - 2026-07-15
 
 - **Multi-file bundle support in the mode lifecycle helpers:** `execute_pipe`, `start_and_wait`, and `start_pipe` now take `mthds_contents: list[str]` (the bundle's `.mthds` files as strings — one entry for a single-file bundle, several for a multi-file one) instead of a single `bundle: str`, passed straight through to the SDK. Multi-file bundles cannot be concatenated into one string (duplicate top-level TOML keys), so the list is the interface. The three demos stay single-file (`mthds_contents=[bundle]`); a method dir with several `.mthds` files is read with `[p.read_text() for p in sorted((METHODS_DIR / "<name>").glob("*.mthds"))]`. The package-data glob broadens to `methods/*/*.mthds` so multi-file bundles ship.

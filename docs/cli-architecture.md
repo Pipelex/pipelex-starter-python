@@ -16,20 +16,21 @@ piper detached  wait <run-id>        # or status, result
 ```
 piper/
   cli.py            # the assembler: load .env, mount the three groups in reading order. Nothing else.
-  inputs.py         # SHARED — encode the inputs
+  inputs.py         # SHARED — prepare the inputs (text/file; incl. the hosted file upload)
   errors.py         # SHARED — present an SDK error
+  usage.py          # SHARED — read + print the run's cost report
   blocking/cli.py   # the whole blocking mode
   attended/cli.py   # the whole attended mode
   detached/cli.py   # the whole detached mode + the run-id lifecycle commands
 ```
 
-Each mode file is a **copy-paste unit**: that file plus `inputs.py` plus `errors.py` is all the *lifecycle* code you need to lift the mode into your own project. A runnable copy also carries the method-specific artifacts the demos reference — the bundles (`piper/methods/`), the generated models (`piper/generated/`), and the sample document — but those are exactly what you replace with your own method anyway. No other code in `piper/` is load-bearing for a mode.
+Each mode file is a **copy-paste unit**: that file plus `inputs.py` plus `errors.py` plus `usage.py` is all the *lifecycle* code you need to lift the mode into your own project. A runnable copy also carries the method-specific artifacts the demos reference — the bundles (`piper/methods/`), the generated models (`piper/generated/`), and the sample document — but those are exactly what you replace with your own method anyway. No other code in `piper/` is load-bearing for a mode.
 
 ## The sharing rule
 
 > Share what is orthogonal to execution. **Never share lifecycle code.**
 
-Input encoding and error presentation don't care how a run is executed, so they are shared. The lifecycle — what you call, in what order, and what you do while waiting — *is* the mode, so it lives in the mode's own file, in full, even when that means near-duplicating a demo command across three files.
+Input preparation, error presentation, and cost-report formatting don't care how a run is executed, so they are shared. The lifecycle — what you call, in what order, and what you do while waiting — *is* the mode, so it lives in the mode's own file, in full, even when that means near-duplicating a demo command across three files. (Cost *extraction* is the one seam that differs per mode — the durable modes read a typed `RunResults.tokens_usages`, blocking lifts the same records raw off its execute result — so each helper picks the right `usage.py` reader; the *formatting* is shared.)
 
 That duplication is deliberate, and it is the pedagogy: diff `blocking/cli.py` against `attended/cli.py` and the only thing that differs is the lifecycle helper. The moment two modes reach for a shared `runner` helper, a dispatch layer is back between the command and the SDK, and the reading path grows a hop. (The earlier version of this starter had exactly that: a `--mode` option → `_dispatch()` → `match ExecutionMode` → `runner.py` → the SDK. Four layers to answer "how do I call the API?".)
 
@@ -42,19 +43,26 @@ All three have the same four-part shape, so they diff cleanly:
 1. **Module docstring** — the mode's contract in a paragraph, plus its copy-paste contract.
 2. **App + consoles** — its own `typer.Typer`, its own `Console()` (stdout, for results — pipeable) and `Console(stderr=True)` (stderr, for progress chatter).
 3. **The lifecycle helper** — one public async function that *is* the mode (`detached` adds the run-id lifecycle helpers described below). It gets a public name because it is the featured code, and it is what the unit tests patch and the e2e tests call directly.
-4. **The demo commands + a private `_run()`** — each command reads its input, reads its bundle, awaits the lifecycle helper through `_run()` (`asyncio.run` + the single `except (PipelineRequestError, httpx.HTTPStatusError)` that presents via `piper/errors.py`), narrows the result into its *generated* model, prints JSON.
+4. **The demo commands + a private `_run()`** — each command reads its input, reads its bundle, awaits the lifecycle helper through `_run()` (`asyncio.run` + the single `except (PipelineRequestError, httpx.HTTPStatusError)` that presents via `piper/errors.py`), narrows the result into its *generated* model, prints JSON to stdout, and prints the run's cost report to stderr.
 
 The lifecycle helpers take the bundle as `mthds_contents: list[str]` — one string per `.mthds` file — and pass it straight to the SDK. The three demos are single-file methods, so each reads its `main.mthds` and wraps it as `mthds_contents=[bundle]`. A method dir may instead hold several `.mthds` files (a multi-file bundle split across pipes with `signature_for` cross-file declarations); read them all with `[p.read_text() for p in sorted((METHODS_DIR / "<name>").glob("*.mthds"))]` and hand that list to the helper unchanged. Concatenating the files into one string would be invalid TOML — the list is the interface for exactly this reason.
 
 | Mode | Lifecycle helper | SDK calls | What the demo prints |
 | --- | --- | --- | --- |
-| `blocking` | `execute_pipe()` | `client.execute` | the result, as JSON |
-| `attended` | `start_and_wait()` | `client.start` + `client.wait_for_result` | the run id (stderr), then the result as JSON |
-| `detached` | `start_pipe()` | `client.start` | the run id, bare, on **stdout** |
+| `blocking` | `execute_pipe()` | `client.execute` | the result as JSON, then a cost report (stderr) |
+| `attended` | `start_and_wait()` | `client.start` + `client.wait_for_result` | the run id (stderr), then the result as JSON + a cost report (stderr) |
+| `detached` | `start_pipe()` | `client.start` | the run id, bare, on **stdout** (no cost — the run isn't done yet) |
 
-`detached` additionally owns the run-id lifecycle: `attend_run()` backs `wait`, and thin fetchers back `status` and `result`. It is the only mode with more than the demos, because "start now, collect later" is only a complete story if you can come back for the result.
+`detached` additionally owns the run-id lifecycle: `attend_run()` backs `wait`, and thin fetchers back `status` and `result`. It is the only mode with more than the demos, because "start now, collect later" is only a complete story if you can come back for the result. The cost report lands where the *result* does, so in detached mode it prints from `wait` and `result` (collection time), not from the start-only demo commands.
 
-The result-producing helpers — `execute_pipe()`, `start_and_wait()`, and detached's `attend_run()` — return the run's resolved `main_stuff` (the SDK types it `Any` — the content is polymorphic). In blocking and attended mode each demo command narrows it with `Model.model_validate(main_stuff)`, which is what restores type safety; the models are generated from the bundles (see [codegen.md](codegen.md)). Detached is different by design: `start_pipe()` returns only the run id, and the run-id commands (`wait`, `result`) print the output generically — at collection time the command doesn't know which method the run executed, so there is no model to narrow into.
+The result-producing helpers — `execute_pipe()`, `start_and_wait()`, and detached's `attend_run()` — return a `(main_stuff, usage)` pair: the run's resolved `main_stuff` (the SDK types it `Any` — the content is polymorphic) and its `RunUsage` (the per-call cost/token records, read via `piper/usage.py`). In blocking and attended mode each demo command narrows `main_stuff` with `Model.model_validate(main_stuff)`, which is what restores type safety (the models are generated from the bundles — see [codegen.md](codegen.md)), then prints `usage` as a cost report to stderr. Detached is different by design: `start_pipe()` returns only the run id, and the run-id commands (`wait`, `result`) print the output generically — at collection time the command doesn't know which method the run executed, so there is no model to narrow into.
+
+### Cost reports and file upload
+
+Two SDK capabilities show up in every result-producing path:
+
+- **Cost report.** A completed run reports what its inference calls consumed. `piper/usage.py` reads that off the SDK result (`usage_from_results` for the durable modes' typed `RunResults.tokens_usages`; `usage_from_execute` for blocking, which still lifts the records raw off `pipe_output`) and `print_cost_report` renders a per-call table plus a USD total — always to **stderr**, so stdout stays the clean, pipeable result. It respects the SDK's semantics: an unpriced call (`cost is None`: mock / own-GPU / dry-run) is not a zero-cost call, and token categories are never summed (`input_cached` is a subset of `input`).
+- **File upload.** `summarize-pdf` feeds a *file* to a pipe. A hosted run cannot see your filesystem, so `inputs.py`'s `upload_document_input` uploads the file first (`client.upload_file`) and the run request carries only the returned `pipelex-storage://` URI — never the bytes. Preparation is a step of its own, before the run: an unreadable file or an upload-incapable deployment fails before any run is created, presented through the same `piper/errors.py` path as every other SDK error.
 
 ## Two conventions worth copying
 

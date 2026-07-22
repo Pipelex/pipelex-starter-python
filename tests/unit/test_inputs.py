@@ -1,10 +1,11 @@
-import base64
 from pathlib import Path
 
 import pytest
 import typer
+from pipelex_sdk.upload import UploadRecord
+from pytest_mock import MockerFixture
 
-from piper.inputs import build_document_input, read_text_input
+from piper.inputs import build_document_input, read_text_input, upload_document_input
 
 
 class TestInputs:
@@ -38,23 +39,36 @@ class TestInputs:
         assert resolved.is_sample is True
 
     def test_pdf_envelope(self, tmp_path: Path):
+        # build_document_input is pure now: it wraps an already-uploaded storage URI.
         pdf = tmp_path / "invoice.pdf"
-        payload = b"%PDF-1.4 hello"
-        pdf.write_bytes(payload)
-        envelope = build_document_input(pdf)
+        envelope = build_document_input(pdf, "pipelex-storage://abc123")
         assert envelope["concept"] == "Document"
         content = envelope["content"]
         assert content["filename"] == "invoice.pdf"
         assert content["mime_type"] == "application/pdf"
-        expected = base64.b64encode(payload).decode("ascii")
-        assert content["url"] == f"data:application/pdf;base64,{expected}"
+        assert content["url"] == "pipelex-storage://abc123"
 
     def test_unknown_extension_falls_back_to_octet_stream(self, tmp_path: Path):
         blob = tmp_path / "data.unknownext"
-        blob.write_bytes(b"\x00\x01\x02")
-        envelope = build_document_input(blob)
+        envelope = build_document_input(blob, "pipelex-storage://blob")
         assert envelope["content"]["mime_type"] == "application/octet-stream"
 
-    def test_missing_file_raises(self, tmp_path: Path):
-        with pytest.raises(FileNotFoundError):
-            build_document_input(tmp_path / "nope.pdf")
+    async def test_upload_document_input_uploads_then_wraps_the_uri(self, mocker: MockerFixture, tmp_path: Path):
+        # upload_document_input uploads the file, then builds the envelope around the returned URI.
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        record = UploadRecord(uri="pipelex-storage://uploaded", filename="doc.pdf", content_type="application/pdf", size=12)
+        fake_client = mocker.AsyncMock()
+        fake_client.upload_file.return_value = record
+        async_cm = mocker.MagicMock()
+        async_cm.__aenter__ = mocker.AsyncMock(return_value=fake_client)
+        async_cm.__aexit__ = mocker.AsyncMock(return_value=None)
+        mocker.patch("piper.inputs.PipelexAPIClient", return_value=async_cm)
+
+        envelope = await upload_document_input(pdf)
+
+        fake_client.upload_file.assert_awaited_once_with(pdf)
+        assert envelope["concept"] == "Document"
+        assert envelope["content"]["url"] == "pipelex-storage://uploaded"
+        assert envelope["content"]["filename"] == "doc.pdf"
+        assert envelope["content"]["mime_type"] == "application/pdf"

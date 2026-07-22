@@ -11,8 +11,8 @@ from another terminal, another machine, another day:
 
 Same durable run as `piper attended`; the only difference is who waits.
 
-Copy-paste unit: this file + `piper/inputs.py` + `piper/errors.py`. The three mode
-packages never share lifecycle code, so the demo commands below are deliberate
+Copy-paste unit: this file + `piper/inputs.py` + `piper/errors.py` + `piper/usage.py`. The
+three mode packages never share lifecycle code, so the demo commands below are deliberate
 mirrors of their `blocking` / `attended` twins: only `start_pipe()` differs — plus
 the run-lifecycle commands, which exist only here.
 """
@@ -29,7 +29,8 @@ from pipelex_sdk.runs import PollInfo, RunRead, RunResultCompleted, RunResultFai
 from rich.console import Console
 
 from piper.errors import present_error
-from piper.inputs import SAMPLE_ENTITIES_TEXT, SAMPLE_IMAGE_PROMPT, SAMPLE_INVOICE, build_document_input, read_text_input
+from piper.inputs import SAMPLE_ENTITIES_TEXT, SAMPLE_IMAGE_PROMPT, SAMPLE_INVOICE, read_text_input, upload_document_input
+from piper.usage import RunUsage, print_cost_report, usage_from_results
 
 ResultT = TypeVar("ResultT")
 
@@ -54,8 +55,8 @@ async def start_pipe(*, pipe_code: str, mthds_contents: list[str], inputs: dict[
     return start_result.pipeline_run_id
 
 
-async def attend_run(run_id: str) -> Any:
-    """Poll an already-started run to completion and resolve its main output."""
+async def attend_run(run_id: str) -> tuple[Any, RunUsage]:
+    """Poll an already-started run to completion; resolve its main output and its `RunUsage`."""
     async with PipelexAPIClient() as client:
         short_id = run_id[:8]
         with progress_console.status(f"Run {short_id}… in progress") as status:
@@ -69,7 +70,7 @@ async def attend_run(run_id: str) -> Any:
                 # Ctrl-C: the run keeps executing server-side — nothing is lost, just wait on it again.
                 progress_console.print(f"\nInterrupted — the run is still executing. Resume with: [bold]piper detached wait {run_id}[/bold]")
                 raise
-    return results.main_stuff
+    return results.main_stuff, usage_from_results(results)
 
 
 async def fetch_run_status(run_id: str) -> RunRead:
@@ -110,7 +111,8 @@ def summarize_pdf(
     if file is None:
         progress_console.print(f"[dim]No file given — using the sample: {document.name}. Pass a path to summarize your own document.[/dim]")
     bundle = (METHODS_DIR / "summarize-pdf" / "main.mthds").read_text()
-    inputs = {"document": build_document_input(document)}
+    # Upload the file first (a separate step from the run) — the run request carries only its URI.
+    inputs = {"document": _run(upload_document_input(document))}
     run_id = _run(start_pipe(pipe_code="summarize_pdf", mthds_contents=[bundle], inputs=inputs))
     _print_run_id(run_id)
 
@@ -136,8 +138,9 @@ def generate_image(
 @app.command(name="wait")
 def wait(run_id: Annotated[str, typer.Argument(help="The pipeline run id printed when the run started.")]) -> None:
     """Poll a run to completion, then print its result."""
-    main_stuff = _run(attend_run(run_id))
+    main_stuff, usage = _run(attend_run(run_id))
     _print_main_stuff(main_stuff)
+    print_cost_report(progress_console, usage)
 
 
 @app.command(name="status")
@@ -161,6 +164,7 @@ def result(run_id: Annotated[str, typer.Argument(help="The pipeline run id print
             )
         case RunResultCompleted():
             _print_main_stuff(state.result.main_stuff)
+            print_cost_report(progress_console, usage_from_results(state.result))
         case RunResultFailed():
             progress_console.print(f"[red]Run {state.pipeline_run_id} ended with status {state.status}: {state.message}[/red]")
             raise typer.Exit(1)

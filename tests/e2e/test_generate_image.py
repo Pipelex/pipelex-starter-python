@@ -19,6 +19,6 @@ class TestGenerateImage:
         bundle = BUNDLE_PATH.read_text()
         run_id = await start_pipe(pipe_code="generate_image", mthds_contents=[bundle], inputs={"image_prompt": SAMPLE_PROMPT})
         assert run_id
-        main_stuff = await attend_run(run_id)
+        main_stuff, _usage = await attend_run(run_id)
         image = Image.model_validate(main_stuff)
         assert image.url

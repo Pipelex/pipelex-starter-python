@@ -10,7 +10,7 @@ It ships a handful of demo methods, each exposed as a `piper` CLI command:
 - **`summarize-pdf`** — given a document (PDF), produce a title, document type, and key points. Shows how to feed a *file* to a pipe.
 - **`generate-image`** — given a text prompt, generate an image. Being slow, it's the example that best shows the split between the execution modes (image generation routinely outlives the hosted ~30s blocking cap).
 
-Each prints its result as JSON.
+Each prints its result as JSON on stdout, and a short **cost report** (per-call model + USD cost) to stderr — so the result stays pipeable while you still see what the run consumed.
 
 ### Use this template
 
@@ -157,11 +157,11 @@ flowchart TD
 
 1. **Read the bundle.** `piper` reads `methods/extract-entities/main.mthds` from disk and constructs a `PipelexAPIClient`, which picks up `PIPELEX_BASE_URL` / `PIPELEX_API_KEY` from the environment. A method dir may hold a single `main.mthds` or several `.mthds` files (a multi-file bundle split across pipes) — read them all with `[p.read_text() for p in sorted((METHODS_DIR / "<name>").glob("*.mthds"))]`.
 2. **Run it on the API.** The bundle's files are sent together as *content* (`mthds_contents`, one string per file), so nothing method-specific needs to live in the runtime — edit the `.mthds` file(s) and re-run, no redeploy.
-3. **Narrow the result.** The SDK resolves the run's `main_stuff`; the command validates it into the generated `ExtractedEntities` model (`ExtractedEntities.model_validate(main_stuff)`), printed as JSON.
+3. **Narrow the result.** The SDK resolves the run's `main_stuff`; the command validates it into the generated `ExtractedEntities` model (`ExtractedEntities.model_validate(main_stuff)`), printed as JSON. It also returns the run's per-call usage, which the command prints as a cost report to stderr (via `piper/usage.py`).
 
 The typed models are **not hand-written**: they are generated from the `.mthds` bundles by `pipelex codegen` into `piper/generated/` (stamped, with a `codegen.lock` per method). Edit a bundle → `make codegen` regenerates the models and input templates → `make codegen-check` verifies offline that nothing is stale or hand-edited. See [docs/codegen.md](docs/codegen.md).
 
-The other demos run through the exact same path — they differ only in their inputs and output shapes. `summarize-pdf` sends a `Document` envelope (`inputs.build_document_input()` base64-encodes the file into a `data:` URL); `generate-image` returns the built-in `Image` content.
+The other demos run through the exact same path — they differ only in their inputs and output shapes. `summarize-pdf` feeds a *file* to a pipe: because a hosted run can't see your filesystem, `inputs.upload_document_input()` uploads the PDF first (`client.upload_file`) and the run request carries only the returned `pipelex-storage://` URI, wrapped in a `Document` envelope — the bytes never ride the request. `generate-image` returns the built-in `Image` content.
 
 ## Execution modes: blocking, attended, detached
 
@@ -260,7 +260,7 @@ Each mode is a **self-contained copy-paste unit**: `piper/<mode>/cli.py` holds t
 | `attended` | `start_and_wait()` | `client.start` + `client.wait_for_result` |
 | `detached` | `start_pipe()` (+ `attend_run()` for `wait`) | `client.start` (then `client.wait_for_result` later) |
 
-The only things shared across modes are the two concerns that have nothing to do with execution: `piper/inputs.py` (encode the inputs) and `piper/errors.py` (present an SDK error). **Lifecycle code is never shared** — that is what keeps each mode file copy-pasteable, and it is why the demo commands are near-duplicated across the three: diff `blocking/cli.py` against `attended/cli.py` and the only difference is the lifecycle helper. (`tests/unit/test_mode_symmetry.py` guards that duplication against drift.)
+The only things shared across modes are the concerns that have nothing to do with execution: `piper/inputs.py` (prepare the inputs — incl. uploading a file), `piper/errors.py` (present an SDK error), and `piper/usage.py` (read + print the cost report). **Lifecycle code is never shared** — that is what keeps each mode file copy-pasteable, and it is why the demo commands are near-duplicated across the three: diff `blocking/cli.py` against `attended/cli.py` and the only difference is the lifecycle helper. (`tests/unit/test_mode_symmetry.py` guards that duplication against drift.)
 
 The modes also spell out lifecycles the SDK could hide: `client.start_and_wait()` is a self-healing one-liner that picks the right path by itself — the production shortcut when you don't care which one runs. This starter branches explicitly because teaching the difference is the point.
 
@@ -272,8 +272,9 @@ piper/
   blocking/cli.py                # the whole blocking mode in one file  (execute_pipe)
   attended/cli.py                # the whole attended mode in one file  (start_and_wait)
   detached/cli.py                # the whole detached mode in one file  (start_pipe + wait/status/result)
-  inputs.py                      # SHARED: text-or-file input, and file → Document envelope
+  inputs.py                      # SHARED: text-or-file input, and file → upload → Document envelope
   errors.py                      # SHARED: maps SDK errors to CLI messages + hints
+  usage.py                       # SHARED: reads per-call usage and prints the cost report (stderr)
   generated/                     # typed clients generated from the bundles (`make codegen`) — do not edit
     extract_entities/            #   models.py (stamped) + codegen.lock
     summarize_pdf/
@@ -291,7 +292,7 @@ tests/
 .env.example                     # PIPELEX_BASE_URL + PIPELEX_API_KEY
 ```
 
-Only two modules are shared across the modes, and neither knows anything about execution: see [docs/cli-architecture.md](docs/cli-architecture.md) for the sharing rule and the anatomy of a mode file.
+Only these modules are shared across the modes, and none knows anything about execution mode: see [docs/cli-architecture.md](docs/cli-architecture.md) for the sharing rule and the anatomy of a mode file.
 
 ## Useful commands
 

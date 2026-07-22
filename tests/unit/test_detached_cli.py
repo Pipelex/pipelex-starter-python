@@ -6,9 +6,13 @@ from typer.testing import CliRunner
 
 from piper.cli import app
 from piper.inputs import SAMPLE_ENTITIES_TEXT, SAMPLE_IMAGE_PROMPT
+from piper.usage import RunUsage
 
 ENTITIES_CONTENT = {"people": ["Marie Curie"], "orgs": ["University of Paris"], "dates": ["1906"]}
 RUN_ID = "run-abc123"
+
+# `attend_run` returns (main_stuff, RunUsage); this offline test doesn't exercise cost.
+NO_USAGE = RunUsage(tokens_usages=None, usage_assembly_error=None)
 
 runner = CliRunner()
 
@@ -55,7 +59,7 @@ class TestDetachedCli:
         assert start_mock.await_args is not None
         assert start_mock.await_args.kwargs["inputs"] == {"text": "text from a file"}
 
-    def test_summarize_pdf_falls_back_to_the_sample_invoice(self, mocker: MockerFixture):
+    def test_summarize_pdf_falls_back_to_the_sample_invoice(self, mocker: MockerFixture, stub_upload: str):
         start_mock = mocker.patch("piper.detached.cli.start_pipe", return_value=RUN_ID)
         result = runner.invoke(app, ["detached", "summarize-pdf"])
         assert result.exit_code == 0
@@ -63,12 +67,13 @@ class TestDetachedCli:
         document_input = start_mock.await_args.kwargs["inputs"]["document"]
         assert document_input["concept"] == "Document"
         assert document_input["content"]["filename"] == "sample-invoice.pdf"
+        assert document_input["content"]["url"] == stub_upload
 
     def test_summarize_pdf_rejects_a_missing_file(self, tmp_path: Path):
         result = runner.invoke(app, ["detached", "summarize-pdf", str(tmp_path / "nope.pdf")])
         assert result.exit_code != 0
 
-    def test_summarize_pdf_sends_the_document_envelope(self, mocker: MockerFixture, tmp_path: Path):
+    def test_summarize_pdf_sends_the_document_envelope(self, mocker: MockerFixture, tmp_path: Path, stub_upload: str):
         start_mock = mocker.patch("piper.detached.cli.start_pipe", return_value=RUN_ID)
         pdf = tmp_path / "doc.pdf"
         pdf.write_bytes(b"%PDF-1.4 fake")
@@ -78,7 +83,7 @@ class TestDetachedCli:
         document_input = start_mock.await_args.kwargs["inputs"]["document"]
         assert document_input["concept"] == "Document"
         assert document_input["content"]["mime_type"] == "application/pdf"
-        assert document_input["content"]["url"].startswith("data:application/pdf;base64,")
+        assert document_input["content"]["url"] == stub_upload
 
     def test_generate_image_falls_back_to_the_sample(self, mocker: MockerFixture):
         start_mock = mocker.patch("piper.detached.cli.start_pipe", return_value=RUN_ID)
@@ -97,7 +102,7 @@ class TestDetachedCli:
         assert result.stdout.strip() == RUN_ID
 
     def test_wait_prints_the_raw_main_stuff(self, mocker: MockerFixture):
-        attend_mock = mocker.patch("piper.detached.cli.attend_run", return_value=ENTITIES_CONTENT)
+        attend_mock = mocker.patch("piper.detached.cli.attend_run", return_value=(ENTITIES_CONTENT, NO_USAGE))
         result = runner.invoke(app, ["detached", "wait", RUN_ID])
         assert result.exit_code == 0
         attend_mock.assert_awaited_once_with(RUN_ID)
