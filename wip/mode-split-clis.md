@@ -120,7 +120,9 @@ def extract_entities(
     entities = ExtractedEntities.model_validate(main_stuff)
     output_console.print_json(data=entities.model_dump())
 
+
 # … summarize-pdf and generate-image follow the same shape …
+
 
 def _run(coro: Coroutine[Any, Any, ResultT]) -> ResultT:
     """Await the lifecycle, presenting SDK errors as clean exits."""
@@ -148,8 +150,10 @@ async def start_and_wait(*, pipe_code: str, bundle: str, inputs: dict[str, Any])
         run_id = start_result.pipeline_run_id
         progress_console.print(f"Run started: [bold]{run_id}[/bold]")
         with progress_console.status(f"Run {run_id[:8]}… in progress") as status:
+
             def on_poll(info: PollInfo) -> None:
                 status.update(f"Run {run_id[:8]}… in progress — {info.elapsed_seconds:.0f}s, poll #{info.attempt}")
+
             try:
                 results = await client.wait_for_result(run_id, options=WaitForResultOptions(on_poll=on_poll))
             except asyncio.CancelledError:
