@@ -1,135 +1,72 @@
 ---
 name: release
-description: Prepare a new release for the pipelex-starter-python project. Bumps version in pyproject.toml, syncs uv.lock, updates CHANGELOG.md, manages the release/vX.Y.Z branch, runs lint/type checks and tests, and commits. Use when the user says "release", "prepare a release", "bump version", "new version", "cut a release", or "ship it". The user can optionally provide changelog content inline (e.g. "/release Added foo, fixed bar"), which becomes the entry for this version.
+description: >
+  Cut a release of pipelex-starter-python, the Python starter template that runs
+  .mthds methods against the hosted Pipelex API: the release/vX.Y.Z worktree, the
+  pyproject.toml bump and the uv.lock that follows, the changelog entry, the
+  quality gates, one commit, and a pull request to main. Use when the user says
+  "release", "cut a release", "bump version", "prepare a release", "make a
+  release", "ship it", "create release branch", "promote dev to main", "tag a
+  version", or any variation of shipping a new version of the starter. Changelog
+  content passed inline ("/release Added a detached-mode demo") becomes the entry.
+  The merge is landed by /ledger-land, never by this skill.
 ---
 
-# Release Workflow
+# Releasing pipelex-starter-python
 
-Guides the user through preparing a new pipelex-starter-python release in 8 interactive steps. Every step requires explicit user confirmation before proceeding.
+The procedure is the workspace release play, [`docs/releasing.md`](../../../../docs/releasing.md) at the workspace root — read it first, then run it with what follows. The repo key is `pipelex-starter-python`, the base is `dev`, and the pull request targets `main`: `guard-branches.yml`'s `gate-main` job refuses any head branch but `release/vX.Y.Z` into `main`, so there is no other way in. The release worktree is `_pipelex-starter-python--release`, made with `wt add pipelex-starter-python release --branch release/vX.Y.Z`. The repo declares neither `.worktree.toml` nor `.worktreeinclude`, so `wt` resolves the base from `origin/dev` and provisions with the Makefile's `install` target, which is what creates the `.venv` every gate below runs out of.
 
-This is a **starter template, not a published package** — there is no PyPI publish. The release is cut by merging the `release/vX.Y.Z` PR into `main`: `github-release.yml` then creates a GitHub Release `vX.Y.Z` from the changelog notes. So the branch name, the `pyproject.toml` version, and the `CHANGELOG.md` heading must line up exactly, or CI blocks the PR.
+## What ships
 
-## Step 1 — Gather State
+**A GitHub Release, and nothing else.** No workflow in `.github/workflows/` builds, uploads or publishes a distribution: this repo is the starter template a new project is cloned from, and the `name = "piper"` in `pyproject.toml` is the placeholder the `bootstrap` skill rewrites in the clone, not a package anyone installs from a registry. The directory is `pipelex-starter-python`; the Python package inside it is `piper`.
 
-Read the following and present a summary:
+`github-release.yml` fires on the push to `main` (`on: push: branches: [main]`), reads the number with `grep -m 1 'version = ' pyproject.toml | cut -d '"' -f 2`, slices the notes out of `CHANGELOG.md` between that version's `## [vX.Y.Z] - ` heading and the next such heading, and creates the Release with `gh release create "v$VERSION"` — which is also what creates the tag.
 
-1. Current version from `pyproject.toml` (`version = "X.Y.Z"`, near the top of the `[project]` table)
-2. Latest entry in `CHANGELOG.md`
-3. Current git branch (`git branch --show-current`)
-4. Working tree status (`git status --short`)
+Two things about that job are worth knowing before the merge:
 
-If the working tree is dirty, **warn the user** and ask whether to continue, commit those changes as part of the release, or abort. Also run `git log origin/main..HEAD --oneline` to list commits that will ship with this release so the user knows what's included.
+- **It is unguarded.** Nothing checks whether the Release or the tag already exists, so a push to `main` carrying no version bump fails at `gh release create`, and re-running a run whose Release was already created fails the same way. Once a version has shipped, the way forward is a new version, not a re-run.
+- **A missing changelog entry does not fail it.** When no `## [vX.Y.Z] - ` heading matches the version, the extraction step prints a warning, sets the notes empty and exits 0, so the Release ships carrying the bare line `Release vX.Y.Z`. `changelog-check.yml` on the pull request is the only thing standing between a forgotten entry and that outcome.
 
-## Step 2 — Determine Target Version
-
-Calculate the three semver bump options from the current version:
-
-- **Patch**: `X.Y.Z+1`
-- **Minor**: `X.Y+1.0`
-- **Major**: `X+1.0.0`
-
-Present these options to the user using `AskUserQuestion`, showing the concrete resulting version for each. If the current branch already looks like `release/vA.B.C` and the version in `pyproject.toml` was already bumped, offer a **"Keep current (A.B.C)"** option.
-
-Store the chosen version as `TARGET_VERSION` (no `v` prefix, e.g. `0.9.0`).
-
-## Step 3 — Branch Management
-
-The release branch **must** be named `release/v{TARGET_VERSION}`. `guard-branches.yml` rejects any other source branch merging into `main`, and `version-check.yml` requires the branch version to match `pyproject.toml`, so this name is not optional.
-
-- If already on the correct branch: inform the user and continue.
-- If on `dev`, `main`, or another branch: confirm with the user, then create and switch to `release/v{TARGET_VERSION}` from the current HEAD.
-- If on a *different* release branch: warn the user and ask how to proceed.
-
-All version, changelog, and lock changes must be made **on this branch**.
-
-## Step 4 — Update Version in pyproject.toml
-
-Edit the `version = "..."` line in `pyproject.toml` to `version = "{TARGET_VERSION}"`. Only change the version field — don't touch anything else.
-
-- If the version already matches: inform the user and skip.
-- Otherwise: use the Edit tool to make the change, then show the diff.
-
-The version in `pyproject.toml` must **not** have a `v` prefix (e.g. `0.9.0`, not `v0.9.0`).
-
-## Step 5 — Sync uv.lock
-
-After updating `pyproject.toml`, regenerate the lock file so it reflects `TARGET_VERSION`:
+The landing verifies the publish — the run, the Release, the tag:
 
 ```bash
-make li
+gh run list --workflow=github-release.yml --branch main --limit 3 --json conclusion,headSha,url  # the run whose headSha is the merge SHA: success
+gh release view vX.Y.Z                                                                           # the Release and its notes
+git fetch --tags --prune origin && git tag --list vX.Y.Z                                         # the tag
 ```
 
-`make li` runs `uv lock` then `uv sync` (lock + install). CI's `package-check.yml` runs `uv lock --locked` and fails the PR if `uv.lock` is out of date, so this step is what keeps that check green. If you only need to refresh the lock without reinstalling, `uv lock` alone is sufficient.
+## Version files and the lock
 
-- **If the lock file was already in sync**: inform the user and continue.
-- **On failure**: show the error and ask the user how to proceed.
+- **`pyproject.toml`** — the `version` field under `[project]`, the one and only place the number is written, and written bare: `0.16.0`, never `v0.16.0`. The `v` belongs to the branch name, the changelog heading and the tag, and to nothing in this file — `version-check.yml` compares against the branch name with `release/v` already stripped, so a `v` here fails the pull request. Keep it the file's **first** `version = ` line: `github-release.yml` reads it with `grep -m 1 'version = '`, and `[tool.uv]`'s `required-version` further down the file also contains that substring, so a project version that stopped being first would hand the Release job a dependency constraint instead of a version. `version-check.yml` is safe from that confusion for a different reason: it anchors its read at the start of the line (`grep '^version'`), and every other version-bearing key in the file carries a prefix before the word — `required-version`, `python_version`, `minversion`, `target-version` — so none of them can match, wherever they sit.
+- **`uv.lock`** — regenerated by `make li` (`uv lock`, then `uv sync --all-extras`), run after the bump so the lockfile records the new number. `package-check.yml` runs `uv lock --locked` on the pull request and fails it over a stale lock. If `make li` fails, stop and report it rather than committing a stale lock.
+- **Also stamped:** nothing. There is no `__version__`, no README badge and no version literal in the docs — the number lives in `pyproject.toml` alone.
 
-## Step 6 — Update CHANGELOG.md
+## Gates
 
-The changelog entry **must** match the CI grep pattern (`changelog-check.yml`): `## [vX.Y.Z] -`
+Run in the worktree, in this order, before the commit:
 
-Check if `CHANGELOG.md` already contains a `## [v{TARGET_VERSION}] -` entry.
+1. `make agent-check` — `fix-unused-imports`, then `format` (ruff format and `plxt fmt` over the `.mthds` and TOML files), `lint` (`ruff check --fix` and `plxt lint`), pyright and mypy. **It rewrites files**, so whatever it touched joins the release commit. Red blocks the release: fix the code, never loosen the target. It is also wider than CI's `lint-check.yml`, which runs the ruff, pyright and mypy merge checks but none of the `plxt` ones, so a MTHDS or TOML formatting finding surfaces here or nowhere.
+2. `make agent-test` — the pytest suite under `(dry_runnable or not inference) and not (needs_output or pipelex_api)`, quiet unless it fails. Those markers keep it offline and keyless. `tests-check.yml` runs `make gha-tests` on the pull request, whose marker set differs (`not inference and not pipelex_api and not gha_disabled`) and which runs on every Python version in the matrix, so a red one here is a red pull request there.
+3. **When a `.mthds` method changed since the last release**, `make codegen-check` — the offline drift check that hashes each generated client against its sibling `codegen.lock`. `git log $(git describe --tags --abbrev=0)..HEAD --oneline -- piper/methods/` says whether one did; if nothing changed, skip it and say so. Nothing else catches stale generated code: no workflow runs this target, and `tests/unit/test_generated_clients.py` is deliberately only "the CI-runnable floor that needs no pipelex CLI at all" — it asserts the stamp and the lock are present, not that they still match the bundle. The target needs a `pipelex` CLI, which is **not** a dependency of this starter, so point the make variable at one: `PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen-check`. The cure when it is red is `make codegen` (same variable) and committing what it regenerates.
 
-- **If it exists**: show the existing entry and ask the user whether to keep it or edit it.
+## The release commit
 
-- **If it's missing**: draft a new entry and insert it directly after the `# Changelog` heading (newest entry on top), formatted as:
+`pyproject.toml`, `uv.lock`, `CHANGELOG.md`, each file `make agent-check` rewrote, and, when `make codegen` had to run, everything that recipe regenerated — the typed clients under `piper/generated/` **and** the `inputs.template.json` that sits beside each method's `main.mthds`, both written in the same pass and both tracked. All staged by name. Leaving the templates behind loses them silently: `make codegen-check` hashes only `piper/generated/`, and the release worktree is reaped at landing.
 
-  ```markdown
-  ## [v{TARGET_VERSION}] - {TODAY'S DATE in YYYY-MM-DD}
+## CI on the release pull request
 
-  - Item one
-  - Item two
-  ```
+- `guard-branches.yml` — the `gate-main` job asserts the head branch into `main` matches `^release/v[0-9]+\.[0-9]+\.[0-9]+$` exactly. Its `protect-workflows` job additionally refuses a change under `.github/workflows/` from an author whose association is `CONTRIBUTOR`.
+- `version-check.yml` — the `pyproject.toml` version equals the version in the branch name. That is all it compares: it never checks the number against what `main` already carries, so a re-used or lower version passes here and fails after the merge, at `gh release create`. A head that is not a release branch does not slip past either — the `exit 0` in its first step ends that step alone, and the comparison that follows then fails on an empty branch version.
+- `changelog-check.yml` — `CHANGELOG.md` carries a `## [vX.Y.Z] - ` heading for the version in the branch name. It asserts nothing about `[Unreleased]`; leaving none behind is the play's rule, not CI's.
+- `lint-check.yml` — `merge-check-ruff-format`, `merge-check-ruff-lint` (which pulls in `check-unused-imports`), `merge-check-pyright` and `merge-check-mypy` on each Python version in the matrix; the aggregator job `Lint (all versions)` is the single required status.
+- `tests-check.yml` — `make gha-tests` on each Python version in the matrix.
+- `package-check.yml` — `uv lock --locked` followed by `git diff --exit-code uv.lock`. It fires on every pull request whatever the base, so it gates the release branch's own pull requests too.
+- `cla.yml` — the CLA assistant, allowlisted for maintainers.
 
-  Source the content, in priority order:
-  1. **Inline content** the user passed when invoking the skill (e.g. `/release Bumped pipelex to 0.32.0`) — use it as the entry body.
-  2. Otherwise, run `git log main..HEAD --oneline` (or `git log --oneline -20` if on `main`) to review recent commits and draft an entry from them.
+## Particulars
 
-  Match the existing changelog style — plain bullets, as in the current entries. You may group under `### Added` / `### Changed` / `### Fixed` / `### Removed` subsections if the content clearly warrants it, but only include subsections that have content. The user may accept, edit, or rewrite the proposed entry.
-
-This project does **not** use an `## [Unreleased]` placeholder — never add one. The changelog should only contain concrete version entries.
-
-## Step 7 — Run Checks
-
-Run the same gates CI enforces on the PR. Both are silent on success and only show output on failure:
-
-```bash
-make agent-check    # ruff format + lint, pyright, mypy (mirrors lint-check.yml)
-make agent-test     # tests, excludes inference/LLM markers (mirrors tests-check.yml)
-```
-
-`make agent-check` auto-formats with ruff, so it may modify files — include any resulting changes in the release commit.
-
-- **On success**: report and continue.
-- **On failure**: show the errors and ask the user how to proceed (fix the issues, skip the check, or abort). Prefer fixing — a failing gate here means the PR's `lint-check` / `tests-check` will fail too.
-
-## Step 8 — Review & Commit
-
-Present a full summary:
-
-- Target version: `v{TARGET_VERSION}`
-- Branch: `release/v{TARGET_VERSION}`
-- Files changed: `pyproject.toml`, `uv.lock`, `CHANGELOG.md` (plus any formatting changes from `make agent-check`, or other files the user chose to include in Step 1)
-- Changelog entry preview
-
-Ask the user to confirm. On confirmation:
-
-1. Stage **only** the release files — `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, plus any formatting changes from the checks and any files the user explicitly chose to include. Never use `git add .` or `git add -A`.
-2. Commit with message: `Release v{TARGET_VERSION}: <one-line changelog summary>`
-3. Show the commit result.
-
-Then offer (but do **not** automatically execute):
-
-- **Push** the branch to origin: `git push -u origin release/v{TARGET_VERSION}`
-- **Create a PR** to `main`: `gh pr create --base main --title "Release/v{TARGET_VERSION}" --body "<changelog entries for this version>"`
-
-Wait for explicit user approval before pushing or creating the PR. When you do create the PR, target `main`, title it `Release/v{TARGET_VERSION}`, and put the changelog entries for this version in the body. Report the PR URL back to the user.
-
-## Rules
-
-- Never use `git add .` or `git add -A` — stage only the release files (and any changes the user explicitly opted into).
-- Never push or create PRs without explicit user approval.
-- The `v` prefix appears in branch names, changelog headers, and the GitHub Release tag, but **not** in `pyproject.toml`.
-- Always use today's date for new changelog entries (format: `YYYY-MM-DD`; run `date +%F` if unsure).
-- Merging the `release/vX.Y.Z` PR into `main` is what ships — `github-release.yml` creates the GitHub Release on push to `main`. There is no PyPI publish; this is a starter template.
-- If any step fails or the user wants to abort, stop immediately — do not continue the workflow.
+- **The pull request is titled `Release/vX.Y.Z`**, with the slash, which is what the merged release pull requests on this repo carry and where it departs from the play's default `Release vX.Y.Z`. Nothing in CI asserts it.
+- **The release commit subject carries a summary.** History here reads `Release vX.Y.Z: <one-line changelog summary>` rather than the bare `Release vX.Y.Z` the play writes. Either lands; match the history unless the user says otherwise.
+- **No pre-release form.** `changelog-check.yml` fires on any head starting with `release/v` and then demands `^release/v([0-9]+\.[0-9]+\.[0-9]+)$`, so `release/v0.16.0-rc.1` fails that check rather than skipping it, and `guard-branches.yml` refuses it into `main` outright. Ship a plain `X.Y.Z`.
+- **The changelog headings carry the `v`** — `## [vX.Y.Z] - YYYY-MM-DD`, which is exactly what `changelog-check.yml` greps for and what `github-release.yml` slices the Release notes out of.
+- **The tags are lightweight**, created as a side effect of `gh release create` rather than by `git tag -a`. Always pass `--tags` when reading them: bare `git describe` finds no annotated tag here and dies.
