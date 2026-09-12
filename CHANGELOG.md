@@ -4,8 +4,13 @@
 
 ### Changed
 
+- **`make codegen` regenerates through the hosted API (Breaking)**: it now runs `scripts/codegen.py`, which discovers every method under `piper/methods/`, posts each one to `POST /v1/codegen` with `pipelex-sdk` and writes the response verbatim with the SDK's `write_codegen_tree` — so regenerating the typed clients needs `PIPELEX_API_KEY` and nothing else, where it used to need a `pipelex` runtime install the starter does not depend on and a `PIPELEX=` make variable pointing at it. That variable now serves `make codegen-check` alone, the offline drift check, until `pipelex-sdk` exposes it too; the `pipelex-sdk` floor moves to `>=0.9.0` for the codegen route and its request envelope, and `make codegen` additionally needs the SDK release that ships `write_codegen_tree` — it says which one and what to do if the installed SDK predates it.
 - **Tooling:** Pinned `ruff` to an exact `0.16.4`, up from `0.14.13`. This matches what the Ruff VS Code extension now bundles, which matters because Ruff 0.16 lints `pyproject.toml` itself: the extension syncs the config file to the language server, and a pre-0.16 binary parses it as Python source and paints phantom `invalid-syntax` diagnostics on lines like `requires-python`. Keeping the pin exact stops the editor and the CLI from drifting apart again. This is a dev dependency, so nothing shipped changes; the upgrade produced no new lint findings. Because this is the starter template every new project is cloned from, the stale pin was propagating into fresh checkouts.
 - **Editor config:** Removed the `ruff.configuration` entry from `.vscode/settings.json`. That setting takes a path to a config file rather than a CLI flag, so its `--config=pyproject.toml` value never resolved — it only appeared to work because Ruff falls back to discovering the same `pyproject.toml` on its own.
+
+### Removed
+
+- **The committed `inputs.template.json` scaffolds (Breaking)**: the generated input template beside each `piper/methods/<method>/main.mthds` is gone, and so is its `package-data` entry — no code read it, the route that projected it is retired, and a committed scaffold nothing reads goes stale unnoticed. The offline floor now asserts that each bundle declares exactly the inputs its mode CLIs pass, read from the `main.mthds` itself rather than from a generated file; `docs/codegen.md` shows how to project a template from a method's input-form descriptor when you want one.
 
 ## [v0.15.0] - 2026-07-22
 

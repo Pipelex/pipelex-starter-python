@@ -1,13 +1,14 @@
 """Smoke tests for the generated typed clients (`piper/generated/`).
 
 Everything here runs offline: the generated models must import, carry the codegen stamp + lock,
-round-trip their own serialization, and stay aligned with the input templates the CLI ships.
+round-trip their own serialization, and stay aligned with the inputs their bundles declare.
 The cryptographic drift check is `make codegen-check` (offline, against each `codegen.lock`);
 these tests are the CI-runnable floor that needs no pipelex CLI at all.
 """
 
-import json
+import tomllib
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -39,14 +40,18 @@ class TestGeneratedClients:
         assert 'path = "models.py"' in lock_text
 
     @pytest.mark.parametrize("method_dir", list(METHODS))
-    def test_input_template_matches_the_cli_inputs(self, method_dir: str):
-        """The committed inputs template names exactly the inputs the CLI passes for the method —
-        a regenerated template that drifted from what `piper/<mode>/cli.py` sends fails here, offline.
+    def test_bundle_declares_exactly_the_cli_inputs(self, method_dir: str):
+        """The method's bundle declares exactly the inputs the CLI passes for it — an input renamed,
+        added or dropped in `main.mthds` that `piper/<mode>/cli.py` does not follow fails here, offline.
+
+        Read from the bundle itself (`.mthds` is TOML, so `tomllib` reads it), not from a generated
+        artifact: the check then holds the moment the bundle is edited, with no regeneration in between.
         """
         expected_inputs = METHODS[method_dir][1]
-        template_path = PIPER_DIR / "methods" / method_dir / "inputs.template.json"
-        template = json.loads(template_path.read_text())
-        assert set(template.keys()) == expected_inputs
+        bundle: dict[str, Any] = tomllib.loads((PIPER_DIR / "methods" / method_dir / "main.mthds").read_text())
+        main_pipe: str = bundle["main_pipe"]
+        declared_inputs: dict[str, str] = bundle["pipe"][main_pipe]["inputs"]
+        assert set(declared_inputs) == expected_inputs
 
     def test_generated_models_round_trip(self):
         """Each generated model validates a wire-shaped payload and round-trips its own dump."""

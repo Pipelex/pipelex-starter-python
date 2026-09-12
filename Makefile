@@ -21,9 +21,11 @@ UV_MIN_VERSION = $(shell grep -m1 'required-version' pyproject.toml | sed -E 's/
 
 USUAL_PYTEST_MARKERS := "(dry_runnable or not inference) and not (needs_output or pipelex_api)"
 
-# The pipelex CLI that runs codegen. It is NOT a dependency of this starter (the starter talks to
-# the hosted API through pipelex-sdk) — point PIPELEX at a pipelex install that ships `codegen`,
-# e.g. `PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen`.
+# The pipelex CLI that runs the OFFLINE codegen drift check (`make codegen-check`) and nothing
+# else: `make codegen` goes through the hosted API with pipelex-sdk, the starter's own dependency.
+# pipelex is NOT a dependency of this starter, so point PIPELEX at a pipelex install that ships
+# `codegen`, e.g. `PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen-check`. The override
+# goes away once pipelex-sdk ships the offline check too.
 PIPELEX ?= pipelex
 
 # Every programmatic invocation goes through this: --no-logo keeps the banner out of CI logs
@@ -59,7 +61,7 @@ make export-requirements-dev  - Export requirements-dev.txt (all dependencies in
 make er                       - Shorthand -> export-requirements
 make erd                      - Shorthand -> export-requirements-dev
 make validate                 - Lint/validate the .mthds bundle with plxt
-make codegen                  - Regenerate the typed clients + input templates from the .mthds methods
+make codegen                  - Regenerate the typed clients from the .mthds methods (needs PIPELEX_API_KEY)
 make codegen-check            - Verify the generated clients are current (offline, pure hashing)
 
 make format                   - Format all (ruff-format + plxt-format)
@@ -206,22 +208,19 @@ validate: env
 ### CODEGEN
 ##########################################################################################
 
-# Regenerate the typed clients (stamped models + codegen.lock) and the runnable input
-# templates from the .mthds methods. Run after editing any main.mthds, then commit the result.
-# The method list here must stay in lockstep with piper/methods/* and the
-# packages/package-data lists in pyproject.toml.
-codegen:
+# Regenerate the typed clients (stamped models + codegen.lock) from the .mthds methods, through
+# the hosted API. Needs PIPELEX_API_KEY and nothing else — no pipelex install, no PIPELEX
+# override: scripts/codegen.py posts each method to /v1/codegen with pipelex-sdk and writes the
+# response verbatim. Run it after editing any main.mthds, then commit the result. The script
+# discovers the methods from piper/methods/, so a new method only has to be added to the
+# packages/package-data lists in pyproject.toml to ship.
+codegen: env
 	$(call PRINT_TITLE,"Regenerating typed clients from the .mthds methods")
-	@$(PIPELEX_RUN) codegen types --target python-pydantic --output piper/generated/extract_entities piper/methods/extract-entities && \
-	$(PIPELEX_RUN) codegen types --target python-pydantic --output piper/generated/summarize_pdf piper/methods/summarize-pdf && \
-	$(PIPELEX_RUN) codegen types --target python-pydantic --output piper/generated/generate_image piper/methods/generate-image && \
-	$(PIPELEX_RUN) codegen inputs --output piper/methods/extract-entities/inputs.template.json piper/methods/extract-entities && \
-	$(PIPELEX_RUN) codegen inputs --output piper/methods/summarize-pdf/inputs.template.json piper/methods/summarize-pdf && \
-	$(PIPELEX_RUN) codegen inputs --output piper/methods/generate-image/inputs.template.json piper/methods/generate-image && \
-	echo "Regenerated typed clients and input templates"
+	@$(VENV_PYTHON) scripts/codegen.py
 
 # Offline drift check: pure hashing against each codegen.lock — no engine boot, no network,
-# no API key. Exit 0 = current, 1 = drift (stale/hand-edited), 2 = no lock.
+# no API key. Exit 0 = current, 1 = drift (stale/hand-edited), 2 = no lock. This half is still
+# the pipelex CLI (see PIPELEX above); it moves onto pipelex-sdk when the SDK ships the check.
 codegen-check:
 	$(call PRINT_TITLE,"Checking generated clients are current - offline")
 	@$(PIPELEX_RUN) codegen check piper/generated/extract_entities && \
