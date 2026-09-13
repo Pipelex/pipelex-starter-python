@@ -17,7 +17,7 @@ classifiers = [
 
 dependencies = [
   "httpx>=0.27.0",
-  "pipelex-sdk>=0.9.0",
+  "pipelex-sdk>=0.10.0",
   "python-dotenv>=1.0.0",
   "typer>=0.15.0",
 ]
@@ -75,7 +75,7 @@ build-backend = "setuptools.build_meta"
 required-version = ">=0.7.2"
 
 [tool.mypy]
-packages = ["piper"]
+packages = ["piper", "scripts"]
 check_untyped_defs = true
 exclude = "^.*\\.venv/.*$"
 mypy_path = "."
@@ -88,7 +88,7 @@ warn_unused_configs = true
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.11"
-include = ["piper", "tests"]
+include = ["piper", "scripts", "tests"]
 analyzeUnannotatedFunctions = true
 deprecateTypingAliases = false
 disableBytesTypePromotions = true

@@ -10,6 +10,8 @@ make agent-check
 ```
 This runs: fix-unused-imports, ruff format, ruff lint, plxt format/lint (`.mthds`/`.toml`), pyright, mypy.
 
+Both type checkers cover `piper/`, `tests/` and `scripts/` — `[tool.pyright] include` and `[tool.mypy] packages` in `pyproject.toml` name all three. Keep `scripts/` in both: the codegen script imports the SDK surface the repo depends on, and leaving it out of scope is what once let `make agent-check` pass while it imported a module the lock did not have.
+
 ### Running Tests
 
 ```bash

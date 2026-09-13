@@ -22,7 +22,7 @@ make codegen        # regenerate the models through the hosted API (needs PIPELE
 make codegen-check  # offline drift check: exit 0 current · 1 drift · 2 no lock
 ```
 
-`make codegen` needs an API key and nothing else. `scripts/codegen.py` discovers every method under `piper/methods/`, posts each one's `.mthds` files to `POST /v1/codegen` with `pipelex-sdk` — the same dependency the starter already runs methods with — and writes the response to disk with the SDK's `write_codegen_tree`. A new method under `piper/methods/` is picked up by the next run with no change to the script or the Makefile; it only has to be added to the `packages` / `package-data` lists in `pyproject.toml` to ship in a wheel. The script needs the `pipelex-sdk` release that ships `write_codegen_tree`; if the installed SDK predates it, the script says which symbol is missing and what to do about it rather than failing with an import error.
+`make codegen` needs an API key and nothing else. `scripts/codegen.py` discovers every method under `piper/methods/`, posts each one's `.mthds` files to `POST /v1/codegen` with `pipelex-sdk` — the same dependency the starter already runs methods with — and writes the response to disk with the SDK's `write_codegen_tree`. A new method under `piper/methods/` is picked up by the next run with no change to the script or the Makefile; it only has to be added to the `packages` / `package-data` lists in `pyproject.toml` to ship in a wheel. `write_codegen_tree` and the codegen request envelope (`pipelex_sdk.crate_models`) arrived in `pipelex-sdk` 0.10.0, which is the floor `pyproject.toml` declares, so a checkout installed from the lock has them and the script imports them plainly.
 
 The tree is written **verbatim**: every artifact at the path the server named it, the lock as `codegen.lock`, byte for byte. That fidelity is the whole trust chain — it makes the tree identical to what a local `pipelex codegen types` run would have written, which is what lets the offline check pass on it. Writing is the SDK's job rather than this script's for the same reason: `write_codegen_tree` validates every path before writing, refuses to overwrite a file codegen does not own, rewrites only what changed (so regenerating a current tree is a true no-op), and prunes stamped artifacts that dropped out of the set. Do not run a formatter over the result.
 
@@ -30,7 +30,7 @@ The tree is written **verbatim**: every artifact at the path the server named it
 
 One thing the offline check cannot see is a bundle edit that was never regenerated — detecting that requires resolving the bundle, which is the engine's job. The guard for it is `make codegen` itself: regeneration is write-if-changed, so running it and checking `git diff` is clean proves the committed clients match the bundles.
 
-The generated files are excluded from ruff in `pyproject.toml`: reformatting them would change their content hash and trip the drift check. They still go through pyright and mypy like any other code.
+The generated files are excluded from ruff in `pyproject.toml`: reformatting them would change their content hash and trip the drift check. They still go through pyright and mypy like any other code, and so does `scripts/codegen.py` — `scripts` is named in `[tool.pyright] include` and `[tool.mypy] packages`, so the script's use of the SDK is verified by `make agent-check` rather than by hand.
 
 ## The one half still on the `pipelex` CLI: `codegen-check`
 

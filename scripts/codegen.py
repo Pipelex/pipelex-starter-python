@@ -35,23 +35,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-
-try:
-    from pipelex_sdk.client import PipelexAPIClient
-    from pipelex_sdk.codegen_writer import write_codegen_tree
-    from pipelex_sdk.crate_models import CodegenRequest, CodegenTarget, CodegenValidReport, MthdsFileItem
-    from pipelex_sdk.errors import ApiResponseError, CodegenError
-except ImportError as exc:  # pragma: no cover
-    # The floor in pyproject.toml cannot name the release that ships `write_codegen_tree`
-    # and the `crate_models` envelope until that release is on PyPI, so say what is
-    # missing instead of letting a bare ModuleNotFoundError land on a starter user.
-    # Delete this guard when the floor is raised.
-    raise SystemExit(
-        f"codegen: the installed pipelex-sdk is older than this script needs ({exc}).\n"
-        "  `make codegen` needs the pipelex-sdk release that ships `write_codegen_tree`\n"
-        "  (pipelex_sdk.codegen_writer). Raise the pipelex-sdk floor in pyproject.toml,\n"
-        "  then run `make li`."
-    ) from exc
+from pipelex_sdk.client import PipelexAPIClient
+from pipelex_sdk.codegen_writer import write_codegen_tree
+from pipelex_sdk.crate_models import CodegenRequest, CodegenTarget, CodegenValidReport, MthdsFileItem
+from pipelex_sdk.errors import ApiResponseError, CodegenError
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # One string per path, the package name followed by a slash: the `/bootstrap` skill rewrites
