@@ -10,6 +10,8 @@ make agent-check
 ```
 This runs: fix-unused-imports, ruff format, ruff lint, plxt format/lint (`.mthds`/`.toml`), pyright, mypy.
 
+Both type checkers cover `piper/`, `tests/` and `scripts/` — `[tool.pyright] include` and `[tool.mypy] packages` in `pyproject.toml` name all three. Keep `scripts/` in both: the codegen script imports the SDK surface the repo depends on, and leaving it out of scope is what once let `make agent-check` pass while it imported a module the lock did not have.
+
 ### Running Tests
 
 ```bash
@@ -25,8 +27,8 @@ Run specific tests (local only): `make tp TEST=test_function_name`
 - `make li` - Lock + install
 - `make cleanderived` - Remove caches/compiled files (useful when linters get confused)
 - `make validate` / `make v` - Lint/validate the `.mthds` bundle with plxt (offline)
-- `make codegen` - Regenerate the typed clients + input templates from the `.mthds` methods (needs the `pipelex` CLI — see below)
-- `make codegen-check` - Verify generated clients are current (offline, pure hashing against each `codegen.lock`)
+- `make codegen` - Regenerate the typed clients from the `.mthds` methods through the hosted API (needs `PIPELEX_API_KEY`, no `pipelex` install)
+- `make codegen-check` - Verify generated clients are current (offline, pure hashing against each `codegen.lock`; still the `pipelex` CLI — see below)
 - `make tb` - Quick boot test (constructs the API client, no network)
 - `make fui` - Fix unused imports only
 - `make plxt-format` - Format `.mthds`/`.toml` files with plxt
@@ -42,7 +44,7 @@ This starter calls the **hosted Pipelex API** via the `pipelex-sdk` package (`Pi
 - **Full demo matrix, guarded.** All three demos exist in all three modes: `extract-entities` (text in), `summarize-pdf` (a *file* in), `generate-image` (prompt in). `generate-image` is the deliberate slow case that overruns the ~30s blocking cap — `piper blocking generate-image` is *expected to fail*, and that is the teaching moment for the durable modes. The near-duplication across mode files is the pedagogy (diff two mode files and only the lifecycle helper differs); `tests/unit/test_mode_symmetry.py` keeps it from drifting. `samples/sample-invoice.pdf` is shipped for `summarize-pdf`.
 - The SDK resolves the main output on every result-producing path (`client.execute` returns a `PipelexExecuteResult`, the durable path a `RunResults`, both exposing a resolved `.main_stuff`, typed `Any`; a completed run with no main stuff raises `MissingMainStuffError`). So the result-producing lifecycle helpers (`execute_pipe`, `start_and_wait`, detached's `attend_run`) return a `(main_stuff, RunUsage)` pair — `main_stuff` plus the run's per-call cost/token usage — and the blocking/attended demo commands narrow `main_stuff` inline — e.g. `ExtractedEntities.model_validate(main_stuff)` — into the generated model, then print the usage as a cost report to stderr. Cost usage is `RunResults`-typed on the durable modes but only raw on blocking's execute result (lifted by `usage_from_execute`; the typed-on-execute follow-up is tracked in `wip/sdk-qol/typed-tokens-usages-on-execute.md`). Detached is the exception by design: `start_pipe` returns only the run id (the demos print it bare, no cost — the run isn't done), and the run-id commands (`wait`/`result`) print the output generically **and** its cost report — no model narrowing, since at collection time the command doesn't know which method the run executed. There is no per-example wrapper layer.
 - The modes spell out lifecycles the SDK could hide: `client.start_and_wait()` is a self-healing one-liner that picks the path for you (the production shortcut). The starter writes them out because teaching the difference is the point.
-- **The typed models are generated, never hand-written.** `pipelex codegen` projects each bundle's concepts into `piper/generated/<method>/models.py` (stamped, locked by a sibling `codegen.lock`); the mode CLIs and the e2e tests import from there. Do NOT edit generated files — edit the bundle, then `make codegen` (regenerates models + `inputs.template.json` scaffolds) and `make codegen-check` (offline drift check). The `pipelex` CLI is not a dependency of this starter; point the `PIPELEX` make variable at a pipelex install that ships `codegen`. `piper/generated` is excluded from ruff (reformatting would trip the drift check) but fully type-checked. See `docs/codegen.md`.
+- **The typed models are generated, never hand-written.** Codegen projects each bundle's concepts into `piper/generated/<method>/models.py` (stamped, locked by a sibling `codegen.lock`); the mode CLIs and the e2e tests import from there. Do NOT edit generated files — edit the bundle, then `make codegen` and `make codegen-check` (offline drift check). `make codegen` is `scripts/codegen.py`: it discovers the methods under `piper/methods/`, posts each to the hosted `POST /v1/codegen` with `pipelex-sdk`, and writes the response verbatim with the SDK's `write_codegen_tree` — so regenerating needs `PIPELEX_API_KEY` and no `pipelex` install, exactly as `pipelex-starter-js` does it. `make codegen-check` is the one half still on the `pipelex` CLI (point the `PIPELEX` make variable at an install that ships `codegen`) until `pipelex-sdk` exposes the offline check. There is deliberately no committed `inputs.template.json`; `docs/codegen.md` says why and where a template comes from instead. `piper/generated` is excluded from ruff (reformatting would trip the drift check) but fully type-checked. See `docs/codegen.md`.
 
 ## Project Structure
 

@@ -444,7 +444,13 @@ def survivor_probe_options(opts: Options) -> Options:
 
 def gather_target_files(root: Path, names: Names) -> list[Path]:
     """The explicit set of files that may contain the name. Kept narrow on
-    purpose: we never sweep .venv, uv.lock, .git, .github or .pipelex traces."""
+    purpose: we never sweep .venv, uv.lock, .git, .github or .pipelex traces.
+
+    `scripts/` is in the set because `scripts/codegen.py` holds the `piper/methods` and
+    `piper/generated` paths that used to sit in the Makefile. A file missing from this list is
+    not merely left alone: find_surviving_placeholders() reads the same list, so the
+    no-token-survives assertion cannot see it either, and bootstrap reports success over a
+    half-renamed project."""
     candidates: list[Path] = [
         root / "pyproject.toml",
         root / "README.md",
@@ -456,6 +462,7 @@ def gather_target_files(root: Path, names: Names) -> list[Path]:
     candidates += sorted(pkg_dir.rglob("*.py"))
     candidates += sorted(pkg_dir.rglob("*.mthds"))
     candidates += sorted((root / "tests").rglob("*.py"))
+    candidates += sorted((root / "scripts").rglob("*.py"))
     candidates += sorted((root / "docs").rglob("*.md"))
     seen: set[Path] = set()
     files: list[Path] = []

@@ -159,7 +159,7 @@ flowchart TD
 2. **Run it on the API.** The bundle's files are sent together as *content* (`mthds_contents`, one string per file), so nothing method-specific needs to live in the runtime — edit the `.mthds` file(s) and re-run, no redeploy.
 3. **Narrow the result.** The SDK resolves the run's `main_stuff`; the command validates it into the generated `ExtractedEntities` model (`ExtractedEntities.model_validate(main_stuff)`), printed as JSON. It also returns the run's per-call usage, which the command prints as a cost report to stderr (via `piper/usage.py`).
 
-The typed models are **not hand-written**: they are generated from the `.mthds` bundles by `pipelex codegen` into `piper/generated/` (stamped, with a `codegen.lock` per method). Edit a bundle → `make codegen` regenerates the models and input templates → `make codegen-check` verifies offline that nothing is stale or hand-edited. See [docs/codegen.md](docs/codegen.md).
+The typed models are **not hand-written**: they are generated from the `.mthds` bundles into `piper/generated/` (stamped, with a `codegen.lock` per method) by the hosted API's codegen route, reached through the same `pipelex-sdk` the runs go through — so regenerating needs your API key and no local Pipelex runtime. Edit a bundle → `make codegen` regenerates the models → `make codegen-check` verifies offline that nothing is stale or hand-edited. See [docs/codegen.md](docs/codegen.md).
 
 The other demos run through the exact same path — they differ only in their inputs and output shapes. `summarize-pdf` feeds a *file* to a pipe: because a hosted run can't see your filesystem, `inputs.upload_document_input()` uploads the PDF first (`client.upload_file`) and the run request carries only the returned `pipelex-storage://` URI, wrapped in a `Document` envelope — the bytes never ride the request. `generate-image` returns the built-in `Image` content.
 
@@ -280,7 +280,7 @@ piper/
     summarize_pdf/
     generate_image/
   methods/                       # the method bundles (sent to the API as content)
-    extract-entities/            #   main.mthds + inputs.template.json (generated runnable template)
+    extract-entities/            #   main.mthds (one file here, but a bundle may be several)
     summarize-pdf/
     generate-image/
 samples/
@@ -302,7 +302,7 @@ uv run piper attended generate-image "…"       # durable run, wait here for it
 uv run piper detached generate-image "…"       # durable run, print its id, return
 uv run piper detached wait <run-id>            # collect it later (also: detached status | detached result)
 make validate       # lint/validate the .mthds bundles with plxt (offline)
-make codegen        # regenerate the typed clients + input templates from the bundles
+make codegen        # regenerate the typed clients from the bundles (needs PIPELEX_API_KEY)
 make codegen-check  # verify the generated clients are current (offline, pure hashing)
 make agent-check    # fix-imports + format + lint + pyright + mypy
 make agent-test     # offline test suite (silent on success)

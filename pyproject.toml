@@ -17,7 +17,7 @@ classifiers = [
 
 dependencies = [
   "httpx>=0.27.0",
-  "pipelex-sdk>=0.5.0",
+  "pipelex-sdk>=0.10.0",
   "python-dotenv>=1.0.0",
   "typer>=0.15.0",
 ]
@@ -26,8 +26,11 @@ dependencies = [
 piper = "piper.cli:app"
 
 [tool.setuptools]
-# The method list is enumerated per method in three places that must stay in lockstep:
-# piper/methods/*, this packages/package-data block, and the Makefile codegen targets.
+# Every method is enumerated per method in this packages/package-data block, which must stay in
+# lockstep with piper/methods/*. `make codegen` discovers the methods from that directory and
+# needs no list, but three sites still name each method one by one: this block (what a wheel
+# ships), the codegen-check recipe in the Makefile, and the METHODS map in
+# tests/unit/test_generated_clients.py.
 packages = [
   "piper",
   "piper.attended",
@@ -41,8 +44,8 @@ packages = [
 include-package-data = true
 
 [tool.setuptools.package-data]
-piper = ["py.typed", "methods/*/*.mthds", "methods/*/inputs.template.json"]
-# Ship each codegen.lock alongside its models.py so `pipelex codegen check` works on an installed copy.
+piper = ["py.typed", "methods/*/*.mthds"]
+# Ship each codegen.lock alongside its models.py so the offline drift check works on an installed copy.
 "piper.generated.extract_entities" = ["codegen.lock"]
 "piper.generated.generate_image" = ["codegen.lock"]
 "piper.generated.summarize_pdf" = ["codegen.lock"]
@@ -72,7 +75,7 @@ build-backend = "setuptools.build_meta"
 required-version = ">=0.7.2"
 
 [tool.mypy]
-packages = ["piper"]
+packages = ["piper", "scripts"]
 check_untyped_defs = true
 exclude = "^.*\\.venv/.*$"
 mypy_path = "."
@@ -85,7 +88,7 @@ warn_unused_configs = true
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.11"
-include = ["piper", "tests"]
+include = ["piper", "scripts", "tests"]
 analyzeUnannotatedFunctions = true
 deprecateTypingAliases = false
 disableBytesTypePromotions = true

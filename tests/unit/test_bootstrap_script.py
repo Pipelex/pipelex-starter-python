@@ -83,6 +83,12 @@ include = ["piper", "tests"]
     # A mode sub-package: nested dir, and an import of a sibling module to rewrite.
     (root / "piper" / "blocking" / "cli.py").write_text("from piper.inputs import read_text_input\n", encoding="utf-8")
     (root / "tests" / "test_cli.py").write_text("from piper.cli import app\n", encoding="utf-8")
+    # The codegen script holds the method/generated paths that used to live in the Makefile.
+    (root / "scripts").mkdir()
+    (root / "scripts" / "codegen.py").write_text(
+        'METHODS_DIR = REPO_ROOT / "piper/methods"\nGENERATED_ROOT = REPO_ROOT / "piper/generated"\n',
+        encoding="utf-8",
+    )
 
 
 def test_validate_package_rejects_placeholder_colliding_names() -> None:
@@ -152,6 +158,35 @@ def test_run_rewrites_makefile_and_docs_paths(tmp_path: Path) -> None:
     docs = (tmp_path / "docs" / "codegen.md").read_text(encoding="utf-8")
     assert "invoice_extractor/generated/<method>/models.py" in docs
     assert "piper" not in docs
+
+
+def test_run_rewrites_the_codegen_script_paths(tmp_path: Path) -> None:
+    # `scripts/codegen.py` discovers the methods from `<package>/methods`, so a bootstrap that
+    # skips `scripts/` leaves `make codegen` reading a directory the rename removed — and because
+    # the no-token-survives assertion reads the same file list, it would report success anyway.
+    # The paths must take the underscore package form: the dash dist form is not a directory here.
+    bootstrap = load_bootstrap()
+    write_template(tmp_path)
+
+    names = bootstrap.Names(dist="invoice-extractor", package="invoice_extractor", title="Invoice Extractor")
+    opts = bootstrap.Options(
+        description="Extract invoice fields",
+        author_name=None,
+        author_email=None,
+        repo_url=None,
+        lic=bootstrap.License(kind="mit", spdx="MIT", holder=None, year=2026),
+        clean=False,
+        dry_run=False,
+        use_git=False,
+    )
+
+    bootstrap.run(tmp_path, names, opts)
+
+    script = (tmp_path / "scripts" / "codegen.py").read_text(encoding="utf-8")
+    assert 'REPO_ROOT / "invoice_extractor/methods"' in script
+    assert 'REPO_ROOT / "invoice_extractor/generated"' in script
+    assert "invoice-extractor" not in script
+    assert "piper" not in script
 
 
 def test_survivor_check_still_rejects_unhandled_template_tokens(tmp_path: Path) -> None:
