@@ -57,7 +57,7 @@ This starter calls the **hosted Pipelex API** via the `pipelex-sdk` package (`Pi
 - Dependency manager: uv (>=0.7.2)
 - Pipelex dependency: `pipelex-sdk` package from PyPI (the API client — see pyproject.toml). The `pipelex` runtime is **not** a dependency.
 - `.mthds` files: Pipelex method definition files in `piper/methods/<name>/main.mthds` (or a `method.json` naming a method that lives elsewhere)
-- Scripts: `scripts/codegen.py` (the generator) and `scripts/add_method.py` (the scaffolder, which imports the first by its plain module name — `scripts` is on `mypy_path` and on pyright's `extraPaths` for that)
+- Scripts: `scripts/codegen.py` (the generator) and `scripts/add_method.py` (the scaffolder, which imports the first as `scripts.codegen` — `scripts/__init__.py` makes the directory a package, and `make add-method` runs the scaffolder as `python -m scripts.add_method` from the repository root)
 
 ## Test markers
 
