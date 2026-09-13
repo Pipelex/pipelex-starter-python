@@ -1,0 +1,27 @@
+docs/codegen.md
+  s_414897d69b563e::t_8282f932beb71d 37,43,73-79
+CHANGELOG.md
+  s_414897d69b563e::t_5e29feaf3e3bdf 5-8,11
+README.md
+  s_414897d69b563e::t_fe264c382d5cbd 162
+tests/unit/test_generated_clients.py
+  s_414897d69b563e::t_fd5f0c1058dd56 1,3-4,6-11,19-20,26-46,48-56,61-78,80-85,88-94,96,104-105
+CLAUDE.md
+  s_414897d69b563e::t_fe264c382d5cbd 47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "dea4846362088315be12f381d8b1d6a42bb659b5",
+  "prompts": {},
+  "sessions": {
+    "s_414897d69b563e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5d629fd4-9a39-4cbd-a222-ee7742869d24",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Louis Choquel <louis@pipelex.com>"
+    }
+  }
+}
