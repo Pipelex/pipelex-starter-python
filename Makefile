@@ -26,8 +26,9 @@ USUAL_PYTEST_MARKERS := "(dry_runnable or not inference) and not (needs_output o
 # pipelex is NOT a dependency of this starter, so point PIPELEX at a pipelex install of 0.47.0 or
 # newer, e.g. `PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen-check`. 0.47.0 is the floor
 # because the committed locks carry `lock_version`, a key older CodegenLock models forbid — an
-# older CLI answers with a lock-parse error rather than a drift verdict. The override goes away
-# once pipelex-sdk ships the offline check too.
+# older CLI answers with a lock-parse error rather than a drift verdict. Both the variable and that
+# floor go away once this target moves onto `pipelex_sdk.codegen_check.run_codegen_check`, which the
+# SDK has shipped since 0.10.0 and which `tests/unit/test_generated_clients.py` already runs.
 PIPELEX ?= pipelex
 
 # Every programmatic invocation goes through this: --no-logo keeps the banner out of CI logs
@@ -222,7 +223,9 @@ codegen: env
 
 # Offline drift check: pure hashing against each codegen.lock — no engine boot, no network,
 # no API key. Exit 0 = current, 1 = drift (stale/hand-edited), 2 = no lock. This half is still
-# the pipelex CLI (see PIPELEX above); it moves onto pipelex-sdk when the SDK ships the check.
+# the pipelex CLI (see PIPELEX above); the SDK has shipped the same check since 0.10.0, so what
+# is left is moving this target onto it. Either way it compares a tree against its own lock and
+# never against the bundle — only `make codegen` answers that.
 codegen-check:
 	$(call PRINT_TITLE,"Checking generated clients are current - offline")
 	@$(PIPELEX_RUN) codegen check piper/generated/extract_entities && \

@@ -34,13 +34,13 @@ The generated files are excluded from ruff in `pyproject.toml`: reformatting the
 
 ## The one half still on the `pipelex` CLI: `codegen-check`
 
-This starter talks to the **hosted Pipelex API** through `pipelex-sdk`; the `pipelex` runtime is not installed here, and `make codegen` no longer wants it. The offline check is the remaining exception — it is pure local hashing that `pipelex-sdk` does not expose yet — so until it does, point the `PIPELEX` make variable at a pipelex install of **0.47.0 or newer**:
+This starter talks to the **hosted Pipelex API** through `pipelex-sdk`; the `pipelex` runtime is not installed here, and `make codegen` no longer wants it. This one target is the remaining exception, and it is no longer a missing capability: `pipelex-sdk` ships the same offline check as `pipelex_sdk.codegen_check.run_codegen_check` from 0.10.0, the floor this starter declares, and the test floor below already runs it. It is the make target that has not been moved onto it — so until it is, point the `PIPELEX` make variable at a pipelex install of **0.47.0 or newer**:
 
 ```bash
 PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen-check
 ```
 
-0.47.0 is the floor because each committed `codegen.lock` carries a `lock_version` key, and the `CodegenLock` model before that release forbids unknown keys: an older CLI answers `codegen check` with a lock-parse error instead of a drift verdict. When the SDK ships that check, this half moves onto it in one step and the `PIPELEX` variable goes away. Until then, `codegen-check` is the one target a fresh clone cannot run on its own, and CI runs the offline floor below instead.
+0.47.0 is the floor because each committed `codegen.lock` carries a `lock_version` key, and the `CodegenLock` model before that release forbids unknown keys: an older CLI answers `codegen check` with a lock-parse error instead of a drift verdict. Moving this target onto the SDK drops both the variable and that floor in one step. Until then, `codegen-check` is the one target a fresh clone cannot run on its own — which is why the gate that protects the committed trees is the test floor below, not this target.
 
 ## There is no committed `inputs.template.json`
 
@@ -70,4 +70,10 @@ The descriptor is the standard's own artifact: the inputs, their kinds, and whic
 
 ## Offline test floor
 
-`tests/unit/test_generated_clients.py` runs everywhere (no pipelex CLI, no API key): it checks that the generated modules import, carry the stamp + lock, round-trip their own serialization, and that each bundle declares exactly the inputs its mode CLIs send — so an input renamed in a bundle without the CLIs following fails in CI even before `codegen-check` is wired in.
+`tests/unit/test_generated_clients.py` runs everywhere — no pipelex CLI, no API key, no network — so `tests-check.yml` runs all of it. It is where the committed trees are actually gated:
+
+- **The drift gate.** It runs `pipelex_sdk.codegen_check.run_codegen_check` over each `piper/generated/<method>/` tree, which is the same pure hashing `make codegen-check` performs, reached through the dependency this starter already has. Every artifact's whole body is compared against the SHA-256 its `codegen.lock` records, so a tree regenerated and only half committed, a file hand-edited below its stamp, a locked artifact deleted or a stale one left behind all fail here — and they fail in CI, which a target needing a `pipelex` install cannot do. What it does not prove is that the tree still matches what the *method* resolves to today: that needs the engine, and the guard for it stays `make codegen` itself (write-if-changed, then a clean `git diff`).
+- **The inputs contract.** Each bundle must declare exactly the inputs its mode CLIs send, read from the `main.mthds` with `tomllib`, so an input renamed in a bundle that the CLIs do not follow fails the moment the bundle is edited, with no regeneration in between.
+- **The models themselves.** They must import, carry their stamp, be tracked by their lock, and round-trip their own serialization.
+
+The methods covered are discovered from `piper/methods/`, the same way `scripts/codegen.py` discovers them, so a method added there is gated by the next test run. The one thing written by hand is the set of input names each mode CLI passes — that is the CLI's half of the contract, and deriving it from the bundle would leave the bundle compared with itself — and a test holds that map against the methods actually on disk, so it cannot quietly omit one.
