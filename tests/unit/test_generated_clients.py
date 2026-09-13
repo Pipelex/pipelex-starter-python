@@ -79,8 +79,10 @@ class TestGeneratedClients:
     def test_generated_artifacts_stamped_and_locked(self, method_dir: str):
         """Each generated client carries the codegen stamp header, and its lock tracks the module.
 
-        The drift check above verifies whatever the lock tracks; this one says the lock tracks the
-        module at all, so an empty artifact set cannot pass as a tree in sync with itself.
+        The drift check above compares what the lock tracks against what is on disk, which leaves
+        exactly one state it reads as current: a tree whose lock tracks nothing and whose `models.py`
+        carries no stamp is consistent with itself, so nothing is missing, modified or orphaned. This
+        test is what refuses that tree — the stamp has to be there, and the lock has to name the module.
         """
         generated_dir = generated_dir_for(method_dir)
         models_text = (generated_dir / "models.py").read_text()
