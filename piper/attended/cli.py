@@ -27,6 +27,8 @@ from pipelex_sdk.client import PipelexAPIClient
 from pipelex_sdk.runs import PollInfo, WaitForResultOptions
 from rich.console import Console
 
+# add-method:imports — `make add-method` inserts a scaffolded method's generated-model import
+# into the block below, in sorted position. Keep the token; the prose after it is free.
 from piper.errors import present_error
 from piper.generated.extract_entities.models import ExtractedEntities
 from piper.generated.generate_image.models import Image
@@ -45,18 +47,36 @@ output_console = Console()
 progress_console = Console(stderr=True)
 
 
-async def start_and_wait(*, pipe_code: str, mthds_contents: list[str], inputs: dict[str, Any]) -> tuple[Any, RunUsage]:
+async def start_and_wait(
+    *,
+    pipe_code: str,
+    inputs: dict[str, Any],
+    mthds_contents: list[str] | None = None,
+    method_id: str | None = None,
+    method_ref: str | None = None,
+) -> tuple[Any, RunUsage]:
     """The whole attended lifecycle: start a durable run, print its id, wait here for the result.
 
-    Credentials come from `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`. `mthds_contents` is the
-    bundle's `.mthds` files as strings — one entry for a single-file bundle, several for a
-    multi-file one. The SDK resolves the method's main output for you: `.main_stuff` is
-    the content the pipe named as its result (a completed run that names none raises
-    `MissingMainStuffError`). Alongside it we return the run's `RunUsage` — the per-call
-    cost/token records the command prints as a cost report.
+    Credentials come from `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`. The method arrives as exactly
+    one of three selectors, which is the SDK's own rule: inline `mthds_contents` (the bundle's
+    `.mthds` files as strings — one entry for a single-file bundle, several for a multi-file
+    one), a hosted catalog id (`method_id`), or a published address (`method_ref`). The demos
+    below send the bundle they ship; a command written by `make add-method` sends the selector
+    its `method.json` holds, and the SDK refuses a request carrying more than one.
+
+    The SDK resolves the method's main output for you: `.main_stuff` is the content the pipe
+    named as its result (a completed run that names none raises `MissingMainStuffError`).
+    Alongside it we return the run's `RunUsage` — the per-call cost/token records the command
+    prints as a cost report.
     """
     async with PipelexAPIClient() as client:
-        start_result = await client.start(pipe_code=pipe_code, mthds_contents=mthds_contents, inputs=inputs)
+        start_result = await client.start(
+            pipe_code=pipe_code,
+            mthds_contents=mthds_contents,
+            inputs=inputs,
+            method_id=method_id,
+            method_ref=method_ref,
+        )
         run_id = start_result.pipeline_run_id
         # Printed before the first poll, so Ctrl-C leaves you with a usable run id.
         progress_console.print(f"Run started: [bold]{run_id}[/bold]")
@@ -133,6 +153,10 @@ def generate_image(
     image = Image.model_validate(main_stuff)
     output_console.print_json(data=image.model_dump())
     print_cost_report(progress_console, usage)
+
+
+# add-method:commands — `make add-method` inserts a scaffolded method's command directly above
+# this line. Keep the token; the prose after it is free.
 
 
 def _run(coro: Coroutine[Any, Any, ResultT]) -> ResultT:

@@ -19,10 +19,21 @@ re-serializing the lock breaks that trust chain, which is why the writing is
 path first, refuses to overwrite a file codegen does not own, writes only what
 changed, and prunes stamped artifacts that dropped out of the set.
 
+A method directory names its closure in one of exactly two ways, and never both:
+
+- **`.mthds` files** — the bundle lives here, and the whole directory is sent as inline
+  `files`. This is what the three demos do.
+- **`method.json`** — a one-line manifest holding a hosted catalog id (`method_id`) or a
+  published address (`method_ref`), for a method that lives elsewhere. `make add-method`
+  writes one; regenerating it is this same script, with the selector in place of the files.
+
+Keeping the manifest under `piper/methods/` rather than beside the generated tree is what
+makes the second kind almost free: `piper/methods/` stays the source of truth,
+`piper/generated/` stays purely derived, and a selector-sourced tree is regenerated beside a
+bundle-sourced one instead of through a second path.
+
 Nothing here is method-specific: methods are discovered from the filesystem, so
-adding one to `piper/methods/` is all it takes for the next run to generate it
-(the generated package still has to be listed in `pyproject.toml`, which is what
-ships it in a wheel).
+adding one to `piper/methods/` is all it takes for the next run to generate it.
 """
 
 from __future__ import annotations
@@ -34,11 +45,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+import httpx
 from dotenv import load_dotenv
 from pipelex_sdk.client import PipelexAPIClient
 from pipelex_sdk.codegen_writer import write_codegen_tree
 from pipelex_sdk.crate_models import CodegenRequest, CodegenTarget, CodegenValidReport, MthdsFileItem
 from pipelex_sdk.errors import ApiResponseError, CodegenError
+
+from piper.manifest import MANIFEST_FILENAME, ManifestError, read_manifest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # One string per path, the package name followed by a slash: the `/bootstrap` skill rewrites
@@ -60,32 +74,89 @@ EXIT_FAILED = 1
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
+def generated_package_dir(method_name: str) -> Path:
+    """The generated package a method projects into — dashes turned into underscores.
+
+    `summarize-pdf` → `piper/generated/summarize_pdf`, which is the mapping the mode CLIs'
+    imports already use.
+    """
+    return GENERATED_ROOT / method_name.replace("-", "_")
+
+
 @dataclass(frozen=True)
 class MethodSource:
-    """One method's closure: its `.mthds` files and the package its tree is written into."""
+    """One method's closure — inline files or a selector — and the package its tree is written into."""
 
     name: str
-    files: list[MthdsFileItem]
     out_dir: Path
+    files: list[MthdsFileItem] | None = None
+    method_id: str | None = None
+    method_ref: str | None = None
+
+    @property
+    def origin(self) -> str:
+        """Where this method's closure comes from, for the one-line run report."""
+        if self.method_id is not None:
+            return f"catalog {self.method_id}"
+        if self.method_ref is not None:
+            return self.method_ref
+        return "bundle"
+
+    def codegen_request(self) -> CodegenRequest:
+        """The `/v1/codegen` request for this method — one selector, the two projection axes.
+
+        No `pipe_ref`: the `types` kind is concept-set-wide and rejects it with a 422.
+        """
+        return CodegenRequest(files=self.files, method_id=self.method_id, method_ref=self.method_ref, kind="types", target=TARGET)
+
+
+def source_label(path: Path) -> str:
+    """The provenance label a server diagnostic names for one file — repo-relative where it can be.
+
+    A path outside the repository keeps its own spelling rather than raising: the label is there
+    so a diagnostic names a file you can open, and a `relative_to` that refuses is not a reason to
+    fail a run.
+    """
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def read_method_source(method_dir: Path) -> MethodSource | None:
+    """Read one method directory as a closure, or `None` when it holds no method at all.
+
+    A bundle directory holds its whole closure, so every `.mthds` file under it is sent, nested
+    ones included — one for a single-file bundle, several for a multi-file one. Each file carries
+    its repo-relative path as `source`, so a diagnostic the server raises names a file you can
+    open. A manifest directory holds `method.json` and names a method that lives elsewhere.
+
+    Raises:
+        ManifestError: The directory holds both kinds (they would disagree about where the tree
+            came from), or its manifest does not name exactly one method.
+    """
+    bundle_files = sorted(method_dir.rglob("*.mthds"))
+    manifest_path = method_dir / MANIFEST_FILENAME
+    if bundle_files and manifest_path.is_file():
+        msg = f"{method_dir}: holds both .mthds files and {MANIFEST_FILENAME} — a method has one source, not two"
+        raise ManifestError(msg)
+    out_dir = generated_package_dir(method_dir.name)
+    if bundle_files:
+        files = [MthdsFileItem(content=path.read_text(encoding="utf-8"), source=source_label(path)) for path in bundle_files]
+        return MethodSource(name=method_dir.name, out_dir=out_dir, files=files)
+    if manifest_path.is_file():
+        selector = read_manifest(manifest_path)
+        return MethodSource(name=method_dir.name, out_dir=out_dir, method_id=selector.method_id, method_ref=selector.method_ref)
+    return None
 
 
 def discover_methods() -> list[MethodSource]:
-    """Read every method under `piper/methods/` as a closure, in directory order.
-
-    A method's directory holds its whole closure, so every `.mthds` file under it is sent,
-    nested ones included — one for a single-file bundle, several for a multi-file one. The generated package is
-    the method's directory name with dashes turned into underscores (`summarize-pdf` →
-    `piper/generated/summarize_pdf`), which is the mapping the CLIs' imports already use.
-    Each file carries its repo-relative path as `source`, so a diagnostic the server
-    raises names a file you can open.
-    """
+    """Read every method under `piper/methods/` as a closure, in directory order."""
     methods: list[MethodSource] = []
     for method_dir in sorted(path for path in METHODS_DIR.iterdir() if path.is_dir()):
-        bundle_files = sorted(method_dir.rglob("*.mthds"))
-        if not bundle_files:
-            continue
-        files = [MthdsFileItem(content=path.read_text(encoding="utf-8"), source=str(path.relative_to(REPO_ROOT))) for path in bundle_files]
-        methods.append(MethodSource(name=method_dir.name, files=files, out_dir=GENERATED_ROOT / method_dir.name.replace("-", "_")))
+        source = read_method_source(method_dir)
+        if source is not None:
+            methods.append(source)
     return methods
 
 
@@ -106,26 +177,41 @@ def insecure_base_url_reason(base_url: str) -> str | None:
     )
 
 
-def explain(exc: Exception, base_url: str) -> str:
-    """Turn a failure into an actionable line, naming the fix where we know it."""
-    if isinstance(exc, ApiResponseError) and exc.status == 404:
+def explain(exc: Exception, base_url: str, route: str = "POST /v1/codegen") -> str:
+    """Turn a failure into an actionable line, naming the route it came from and the fix where we know it.
+
+    `route` is a parameter because `scripts/add_method.py` reuses this on `POST /v1/validate`, and a
+    validate failure reported against the codegen route would send the reader to the wrong place.
+    """
+    status: int | None = None
+    server_message: str | None = None
+    if isinstance(exc, ApiResponseError):
+        status = exc.status
+        server_message = exc.server_message
+    elif isinstance(exc, httpx.HTTPStatusError):
+        # The protocol routes (`validate` among them) surface a raw httpx error rather than the
+        # SDK's own class, so without this arm their failures print as an httpx one-liner with a
+        # link to MDN and nothing about what to do next.
+        status = exc.response.status_code
+        server_message = exc.response.text.strip() or None
+    if status == 404:
         return (
-            "this base URL does not serve POST /v1/codegen (HTTP 404).\n"
+            f"this base URL does not serve {route} (HTTP 404).\n"
             f"    Base URL: {base_url}\n"
             "    The hosted Pipelex API serves this route — check PIPELEX_BASE_URL in .env,\n"
             "    or drop it to use the default."
         )
-    if isinstance(exc, ApiResponseError) and exc.status == 403:
+    if status == 403:
         # Not a base-URL problem: a 403 on a product route is the platform's surface-access
         # gate, so sending the user to edit PIPELEX_BASE_URL would be the wrong advice.
-        discriminant = f" {exc.code}" if exc.code else ""
+        discriminant = f" {exc.code}" if isinstance(exc, ApiResponseError) and exc.code else ""
         return (
-            f"PIPELEX_API_KEY may not use POST /v1/codegen (HTTP 403{discriminant}).\n"
+            f"PIPELEX_API_KEY may not use {route} (HTTP 403{discriminant}).\n"
             f"    Base URL: {base_url}\n"
             "    The key was recognised; this surface is not enabled for it."
         )
-    if isinstance(exc, ApiResponseError):
-        return f"HTTP {exc.status} from POST /v1/codegen — {exc.server_message or exc}"
+    if status is not None:
+        return f"HTTP {status} from {route} — {server_message or exc}"
     return str(exc)
 
 
@@ -136,8 +222,7 @@ async def generate_method(client: PipelexAPIClient, method: MethodSource) -> boo
     run nor skips the methods after it.
     """
     try:
-        # No `pipe_ref`: the `types` kind is concept-set-wide and rejects it with a 422.
-        response = await client.codegen(CodegenRequest(files=method.files, kind="types", target=TARGET))
+        response = await client.codegen(method.codegen_request())
     # Broad on purpose: every transport and request-shape failure is this method's failure
     # to report, not a reason to abort the methods after it.
     except Exception as exc:
@@ -183,7 +268,11 @@ async def run_codegen() -> int:
         print(f"codegen: {METHODS_DIR.relative_to(REPO_ROOT)}/ does not exist.", file=sys.stderr)
         return EXIT_FAILED
 
-    methods = discover_methods()
+    try:
+        methods = discover_methods()
+    except ManifestError as exc:
+        print(f"codegen: {exc}", file=sys.stderr)
+        return EXIT_FAILED
     if not methods:
         print(f"codegen: no methods found under {METHODS_DIR.relative_to(REPO_ROOT)}/.", file=sys.stderr)
         return EXIT_FAILED
@@ -204,7 +293,7 @@ async def run_codegen() -> int:
         print(f"codegen: {insecure}", file=sys.stderr)
         return EXIT_FAILED
 
-    print(f"codegen: {', '.join(method.name for method in methods)} — via {client.base_url}", flush=True)
+    print(f"codegen: {', '.join(f'{method.name} ({method.origin})' for method in methods)} — via {client.base_url}", flush=True)
     failed = False
     async with client:
         for method in methods:

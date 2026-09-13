@@ -446,15 +446,17 @@ def gather_target_files(root: Path, names: Names) -> list[Path]:
     """The explicit set of files that may contain the name. Kept narrow on
     purpose: we never sweep .venv, uv.lock, .git, .github or .pipelex traces.
 
-    `scripts/` is in the set because `scripts/codegen.py` holds the `piper/methods` and
-    `piper/generated` paths that used to sit in the Makefile. A file missing from this list is
-    not merely left alone: find_surviving_placeholders() reads the same list, so the
-    no-token-survives assertion cannot see it either, and bootstrap reports success over a
-    half-renamed project."""
+    `scripts/` is in the set because `scripts/codegen.py` and `scripts/add_method.py` hold the
+    `piper/methods` and `piper/generated` paths that used to sit in the Makefile, and `AGENTS.md`
+    is named beside `CLAUDE.md` for the same reason both are: they spell the package out. A file
+    missing from this list is not merely left alone: find_surviving_placeholders() reads the same
+    list, so the no-token-survives assertion cannot see it either, and bootstrap reports success
+    over a half-renamed project."""
     candidates: list[Path] = [
         root / "pyproject.toml",
         root / "README.md",
         root / "CLAUDE.md",
+        root / "AGENTS.md",
         root / "Makefile",
         root / "LICENSE",
     ]

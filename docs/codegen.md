@@ -22,7 +22,7 @@ make codegen        # regenerate the models through the hosted API (needs PIPELE
 make codegen-check  # offline drift check: exit 0 current · 1 drift · 2 no lock
 ```
 
-`make codegen` needs an API key and nothing else. `scripts/codegen.py` discovers every method under `piper/methods/`, posts each one's `.mthds` files to `POST /v1/codegen` with `pipelex-sdk` — the same dependency the starter already runs methods with — and writes the response to disk with the SDK's `write_codegen_tree`. A new method under `piper/methods/` is picked up by the next run with no change to the script or the Makefile; it only has to be added to the `packages` / `package-data` lists in `pyproject.toml` to ship in a wheel. `write_codegen_tree` and the codegen request envelope (`pipelex_sdk.crate_models`) arrived in `pipelex-sdk` 0.10.0, which is the floor `pyproject.toml` declares, so a checkout installed from the lock has them and the script imports them plainly.
+`make codegen` needs an API key and nothing else. `scripts/codegen.py` discovers every method under `piper/methods/`, posts each one to `POST /v1/codegen` with `pipelex-sdk` — the same dependency the starter already runs methods with — and writes the response to disk with the SDK's `write_codegen_tree`. A new method under `piper/methods/` is picked up by the next run with no change to the script, the Makefile or `pyproject.toml`: the packages are discovered (`[tool.setuptools.packages.find]`) and the per-method `codegen.lock` ships through a package-data glob, so what a wheel carries is derived too. `write_codegen_tree` and the codegen request envelope (`pipelex_sdk.crate_models`) arrived in `pipelex-sdk` 0.10.0, which is the floor `pyproject.toml` declares, so a checkout installed from the lock has them and the script imports them plainly.
 
 The tree is written **verbatim**: every artifact at the path the server named it, the lock as `codegen.lock`, byte for byte. That fidelity is the whole trust chain — it makes the tree identical to what a local `pipelex codegen types` run would have written, which is what lets the offline check pass on it. Writing is the SDK's job rather than this script's for the same reason: `write_codegen_tree` validates every path before writing, refuses to overwrite a file codegen does not own, rewrites only what changed (so regenerating a current tree is a true no-op), and prunes stamped artifacts that dropped out of the set. Do not run a formatter over the result.
 
@@ -31,6 +31,25 @@ The tree is written **verbatim**: every artifact at the path the server named it
 One thing the offline check cannot see is a bundle edit that was never regenerated — detecting that requires resolving the bundle, which is the engine's job. The guard for it is `make codegen` itself: regeneration is write-if-changed, so running it and checking `git diff` is clean proves the committed clients match the bundles.
 
 The generated files are excluded from ruff in `pyproject.toml`: reformatting them would change their content hash and trip the drift check. They still go through pyright and mypy like any other code, and so does `scripts/codegen.py` — `scripts` is named in `[tool.pyright] include` and `[tool.mypy] packages`, so the script's use of the SDK is verified by `make agent-check` rather than by hand.
+
+## Two source kinds
+
+A method directory under `piper/methods/` names its closure in one of exactly two ways, and never both:
+
+| Kind | What the directory holds | What is sent to `POST /v1/codegen` |
+| --- | --- | --- |
+| **Bundle** | `.mthds` files — the whole closure, nested files included | inline `files`, each labelled with its repo-relative path so a server diagnostic names a file you can open |
+| **Manifest** | `method.json`, holding exactly one of `method_id` or `method_ref` | that selector, resolved server-side |
+
+The three demos are bundles. A manifest is what [`make add-method`](add-method.md) writes for a method that lives on the platform (a catalog id) or in a published package (an address), and it holds the selector and nothing else:
+
+```json
+{ "method_ref": "github.com/Pipelex/methods/text_stats@v0.1.1" }
+```
+
+Keeping it under `piper/methods/` rather than beside the generated tree is what made the second kind almost free. `piper/methods/` stays the source of truth and `piper/generated/` stays purely derived, so `make codegen` regenerates a selector-sourced tree beside a bundle-sourced one through the same call and the same writer, rather than being a second regeneration path with its own rules. A directory holding both kinds is refused rather than resolved in favour of one: the two would disagree about where the tree came from.
+
+The offline gates read the generated tree, so both kinds are covered by them identically. What a manifest-sourced method has no local answer for is the bundle-versus-CLI input check (`test_bundle_declares_exactly_the_cli_inputs`) — there is no bundle on disk to read — and the equivalent there is the scaffolder itself, which derives the command's parameters from the method's own input-form descriptor rather than from anything hand-written.
 
 ## The one half still on the `pipelex` CLI: `codegen-check`
 

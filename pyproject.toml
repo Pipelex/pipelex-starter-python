@@ -26,30 +26,23 @@ dependencies = [
 piper = "piper.cli:app"
 
 [tool.setuptools]
-# Every method is enumerated per method in this packages/package-data block, which must stay in
-# lockstep with piper/methods/*. `make codegen` discovers the methods from that directory and
-# needs no list, but three sites still name each method one by one: this block (what a wheel
-# ships), the codegen-check recipe in the Makefile, and the CLI_INPUTS map in
-# tests/unit/test_generated_clients.py. That last one is the only site that cannot go stale
-# unnoticed: `test_every_method_declares_its_cli_inputs` holds it against the methods on disk.
-packages = [
-  "piper",
-  "piper.attended",
-  "piper.blocking",
-  "piper.detached",
-  "piper.generated",
-  "piper.generated.extract_entities",
-  "piper.generated.generate_image",
-  "piper.generated.summarize_pdf",
-]
 include-package-data = true
 
+# Discovered rather than listed. A method used to be named one by one here, in the codegen-check
+# recipe and in tests/unit/test_generated_clients.py, so adding one meant remembering three sites
+# and `make add-method` would have had to edit this file. All three now derive what they need from
+# piper/methods/ and piper/generated/, and the only site that still names a method by hand is the
+# CLI_INPUTS map in that test — which cannot go stale unnoticed, because
+# `test_every_method_declares_its_cli_inputs` holds it against the bundles actually on disk.
+[tool.setuptools.packages.find]
+include = ["piper", "piper.*"]
+
 [tool.setuptools.package-data]
-piper = ["py.typed", "methods/*/*.mthds"]
+# A method ships its source — a bundle, or the manifest naming where the method lives — because a
+# wheel that ships the call site must ship what that call site loads or names at run time.
+piper = ["py.typed", "methods/*/*.mthds", "methods/*/method.json"]
 # Ship each codegen.lock alongside its models.py so the offline drift check works on an installed copy.
-"piper.generated.extract_entities" = ["codegen.lock"]
-"piper.generated.generate_image" = ["codegen.lock"]
-"piper.generated.summarize_pdf" = ["codegen.lock"]
+"*" = ["codegen.lock"]
 
 [project.optional-dependencies]
 dev = [
