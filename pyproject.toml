@@ -27,8 +27,10 @@ piper = "piper.cli:app"
 
 [tool.setuptools]
 # Every method is enumerated per method in this packages/package-data block, which must stay in
-# lockstep with piper/methods/*. `make codegen` discovers the methods from that directory, so the
-# enumeration here is only about what a wheel ships.
+# lockstep with piper/methods/*. `make codegen` discovers the methods from that directory and
+# needs no list, but three sites still name each method one by one: this block (what a wheel
+# ships), the codegen-check recipe in the Makefile, and the METHODS map in
+# tests/unit/test_generated_clients.py.
 packages = [
   "piper",
   "piper.attended",

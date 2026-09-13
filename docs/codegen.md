@@ -34,13 +34,13 @@ The generated files are excluded from ruff in `pyproject.toml`: reformatting the
 
 ## The one half still on the `pipelex` CLI: `codegen-check`
 
-This starter talks to the **hosted Pipelex API** through `pipelex-sdk`; the `pipelex` runtime is not installed here, and `make codegen` no longer wants it. The offline check is the remaining exception — it is pure local hashing that `pipelex-sdk` does not expose yet — so until it does, point the `PIPELEX` make variable at a pipelex install:
+This starter talks to the **hosted Pipelex API** through `pipelex-sdk`; the `pipelex` runtime is not installed here, and `make codegen` no longer wants it. The offline check is the remaining exception — it is pure local hashing that `pipelex-sdk` does not expose yet — so until it does, point the `PIPELEX` make variable at a pipelex install of **0.47.0 or newer**:
 
 ```bash
 PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen-check
 ```
 
-When the SDK ships that check, this half moves onto it in one step and the `PIPELEX` variable goes away. Until then, `codegen-check` is the one target a fresh clone cannot run on its own, and CI runs the offline floor below instead.
+0.47.0 is the floor because each committed `codegen.lock` carries a `lock_version` key, and the `CodegenLock` model before that release forbids unknown keys: an older CLI answers `codegen check` with a lock-parse error instead of a drift verdict. When the SDK ships that check, this half moves onto it in one step and the `PIPELEX` variable goes away. Until then, `codegen-check` is the one target a fresh clone cannot run on its own, and CI runs the offline floor below instead.
 
 ## There is no committed `inputs.template.json`
 
@@ -60,6 +60,8 @@ from pipelex_sdk.validation_models import VALIDATION_VIEW_INPUT_FORM, PipelexVal
 report = await client.validate(mthds_contents=[bundle], views=[VALIDATION_VIEW_INPUT_FORM])
 if not isinstance(report, PipelexValidationReport):
     raise SystemExit(report.message)
+if report.input_form is None:  # the view is lenient-ignored by a runner that does not serve it
+    raise SystemExit("this API did not return an input form — it predates the input_form view")
 descriptor = report.input_form["extract_entities.extract_entities"]  # pipe_ref -> descriptor
 print(render_inputs_template(descriptor=descriptor, explicit=False, output_format=InputsTemplateFormat.JSON))
 ```

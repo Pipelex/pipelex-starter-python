@@ -48,7 +48,8 @@ class TestGeneratedClients:
         artifact: the check then holds the moment the bundle is edited, with no regeneration in between.
         """
         expected_inputs = METHODS[method_dir][1]
-        bundle: dict[str, Any] = tomllib.loads((PIPER_DIR / "methods" / method_dir / "main.mthds").read_text())
+        with (PIPER_DIR / "methods" / method_dir / "main.mthds").open("rb") as handle:
+            bundle: dict[str, Any] = tomllib.load(handle)
         main_pipe: str = bundle["main_pipe"]
         declared_inputs: dict[str, str] = bundle["pipe"][main_pipe]["inputs"]
         assert set(declared_inputs) == expected_inputs

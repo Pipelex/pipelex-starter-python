@@ -23,9 +23,11 @@ USUAL_PYTEST_MARKERS := "(dry_runnable or not inference) and not (needs_output o
 
 # The pipelex CLI that runs the OFFLINE codegen drift check (`make codegen-check`) and nothing
 # else: `make codegen` goes through the hosted API with pipelex-sdk, the starter's own dependency.
-# pipelex is NOT a dependency of this starter, so point PIPELEX at a pipelex install that ships
-# `codegen`, e.g. `PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen-check`. The override
-# goes away once pipelex-sdk ships the offline check too.
+# pipelex is NOT a dependency of this starter, so point PIPELEX at a pipelex install of 0.47.0 or
+# newer, e.g. `PIPELEX=/path/to/pipelex/.venv/bin/pipelex make codegen-check`. 0.47.0 is the floor
+# because the committed locks carry `lock_version`, a key older CodegenLock models forbid — an
+# older CLI answers with a lock-parse error rather than a drift verdict. The override goes away
+# once pipelex-sdk ships the offline check too.
 PIPELEX ?= pipelex
 
 # Every programmatic invocation goes through this: --no-logo keeps the banner out of CI logs
