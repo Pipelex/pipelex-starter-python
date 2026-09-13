@@ -53,6 +53,11 @@ MANIFEST_IMPORT = "from piper.manifest import MANIFEST_FILENAME, read_manifest"
 
 PIPE_REF = "stats.analyze_text"
 ADDRESS = "github.com/Pipelex/methods/text_stats@v0.1.1"
+# The slug every synthetic plan is built under, deliberately not `text-stats`, the one
+# `docs/add-method.md` walks through. `build_plan` refuses a slug whose method directory, generated
+# package or command already exists in the real tree, so a fixture sharing the documented slug would
+# fail this suite the moment somebody followed the docs.
+SLUG = "fixture-method"
 
 
 def load_add_method() -> Any:
@@ -99,7 +104,7 @@ def build_plan(
     mode: str = "attended",
     multiplicity: IOMultiplicity = IOMultiplicity.SINGLE,
     fields: Sequence[InputFormField] | None = None,
-    slug: str = "text-stats",
+    slug: str = SLUG,
 ) -> Any:
     report = build_report(fields=fields if fields is not None else [text_field()], multiplicity=multiplicity)
     selector = add_method.parse_selector(ADDRESS)
@@ -278,7 +283,7 @@ class TestAddMethod:
     def test_it_reads_the_selector_from_the_manifest_and_sends_the_qualified_pipe(self):
         """A bare code is ambiguous exactly when two domains declare it, which the pipe rule refused to guess at."""
         source = add_method.build_command_source(build_plan())
-        assert 'selector = read_manifest(METHODS_DIR / "text-stats" / MANIFEST_FILENAME)' in source
+        assert f'selector = read_manifest(METHODS_DIR / "{SLUG}" / MANIFEST_FILENAME)' in source
         assert "method_id=selector.method_id, method_ref=selector.method_ref" in source
         assert f'pipe_code="{PIPE_REF}"' in source
         assert ADDRESS not in source
@@ -294,7 +299,7 @@ class TestAddMethod:
         the run must send what the manifest names rather than what was scaffolded.
         """
         module = load_merged_mode_file(plan=build_plan(mode="detached"), directory=tmp_path)
-        method_dir = tmp_path / "methods" / "text-stats"
+        method_dir = tmp_path / "methods" / SLUG
         method_dir.mkdir(parents=True)
         write_manifest(method_dir / "method.json", manifest)
         start_pipe = mocker.AsyncMock(return_value="run-1")
@@ -302,7 +307,7 @@ class TestAddMethod:
         mocker.patch.object(module, "start_pipe", start_pipe)
         mocker.patch.object(module, "_print_run_id")
 
-        module.text_stats(text="hello")
+        module.fixture_method(text="hello")
 
         start_pipe.assert_awaited_once_with(
             pipe_code=PIPE_REF, method_id=manifest.method_id, method_ref=manifest.method_ref, inputs={"text": "hello"}
@@ -311,8 +316,11 @@ class TestAddMethod:
     def test_a_single_output_narrows_into_the_generated_model(self):
         plan = build_plan()
         source = add_method.build_command_source(plan)
-        assert "TextStatsOutput.model_validate(main_stuff)" in source
-        assert add_method.import_lines(plan) == [MANIFEST_IMPORT, "from piper.generated.text_stats.models import TextStats as TextStatsOutput"]
+        assert "FixtureMethodOutput.model_validate(main_stuff)" in source
+        assert add_method.import_lines(plan) == [
+            MANIFEST_IMPORT,
+            "from piper.generated.fixture_method.models import TextStats as FixtureMethodOutput",
+        ]
 
     def test_a_plural_output_goes_through_the_list_reader(self):
         """A plural output arrives as a bare array or an `items` envelope depending on the path."""
@@ -338,7 +346,7 @@ class TestAddMethod:
             command_source=add_method.build_command_source(plan),
         )
         compile(merged, "<merged>", "exec")
-        assert '@app.command(name="text-stats")' in merged
+        assert f'@app.command(name="{SLUG}")' in merged
 
     def test_the_import_lands_in_sorted_position(self):
         """Sorted on insertion rather than fixed up afterwards, so `ruff check` stays green."""
@@ -350,7 +358,7 @@ class TestAddMethod:
         )
         first_party = [line for line in merged.splitlines() if line.startswith("from piper.")]
         assert first_party == sorted(first_party)
-        assert "from piper.generated.text_stats.models import TextStats as TextStatsOutput" in first_party
+        assert "from piper.generated.fixture_method.models import TextStats as FixtureMethodOutput" in first_party
 
     def test_a_mode_file_that_lost_an_anchor_is_refused(self):
         plan = build_plan()
@@ -405,6 +413,26 @@ class TestAddMethod:
             add_method.build_parameter(text_field(name=name))
 
     @pytest.mark.parametrize("mode", sorted(MODE_FILES))
+    @pytest.mark.parametrize("slug", ["print", "filter", "len", "str", "type"])
+    def test_a_command_named_like_a_builtin_is_refused(self, mode: str, slug: str):
+        """A detached command named `print` would replace the `print` in `_print_run_id`, so every run id it prints starts another run."""
+        with pytest.raises(add_method.Refusal, match="Python builtin"):
+            build_plan(mode=mode, slug=slug)
+
+    @pytest.mark.parametrize("name", ["format", "type", "id", "input"])
+    def test_an_input_named_like_a_builtin_is_refused(self, name: str):
+        """Ruff refuses a parameter shadowing a builtin (A002) and cannot fix it, so the scaffold would fail `make agent-check`."""
+        with pytest.raises(add_method.Refusal, match="Python builtin"):
+            add_method.build_parameter(text_field(name=name))
+
+    @pytest.mark.parametrize("mode", sorted(MODE_FILES))
+    @pytest.mark.parametrize("slug", ["wait", "status", "result"])
+    def test_a_command_named_like_a_detached_lifecycle_command_is_refused_in_every_mode(self, mode: str, slug: str):
+        """`tests/unit/test_mode_symmetry.py` keeps these out of blocking and attended; detached already has them."""
+        with pytest.raises(add_method.Refusal, match="run-lifecycle command|already has"):
+            build_plan(mode=mode, slug=slug)
+
+    @pytest.mark.parametrize("mode", sorted(MODE_FILES))
     @pytest.mark.parametrize("multiplicity", [IOMultiplicity.SINGLE, IOMultiplicity.VARIABLE])
     def test_every_name_an_emitted_command_reads_is_a_parameter_or_reserved(self, mode: str, multiplicity: IOMultiplicity):
         """What keeps `COMMAND_LOCALS` and `COMMAND_GLOBALS` honest: a template that starts reading a new name fails here."""
@@ -453,7 +481,7 @@ class TestAddMethod:
         original = MODE_FILES["attended"].read_text()
         mode_file.write_text(original)
         plan = build_plan()._replace(
-            method_dir=tmp_path / "methods" / "text-stats", generated_dir=tmp_path / "generated" / "text_stats", mode_file=mode_file
+            method_dir=tmp_path / "methods" / SLUG, generated_dir=tmp_path / "generated" / "fixture_method", mode_file=mode_file
         )
         mocker.patch.object(add_method, "REPO_ROOT", tmp_path)
         # A lock under another name is refused by the SDK's own writer, once the manifest is already on disk.

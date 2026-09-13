@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import ast
 import asyncio
+import builtins
 import keyword
 import os
 import re
@@ -99,6 +100,16 @@ COMMAND_GLOBALS = frozenset(
         *MODE_HELPERS.values(),
     }
 )
+
+#: Python's builtin names. A command named after one replaces it for the whole mode file — a
+#: detached command named `print` turns `_print_run_id` into a second run of itself — and an input
+#: named after one is a parameter ruff refuses (A002) and cannot fix. Both are refused.
+BUILTIN_NAMES = frozenset(dir(builtins))
+
+#: The run-lifecycle commands `piper detached` owns. `tests/unit/test_mode_symmetry.py` keeps them
+#: out of every other mode, so a command by one of these names is refused in every mode rather than
+#: written into one and failing that suite afterwards.
+LIFECYCLE_COMMANDS = frozenset({"wait", "status", "result"})
 
 #: The two anchor tokens each `piper/<mode>/cli.py` carries. The match is on the token alone, so
 #: the prose after it is free to be reworded — but the tokens themselves must not move or be
@@ -350,6 +361,12 @@ def build_parameter(field: InputFormField) -> Parameter:
         raise Refusal(msg)
     if name in COMMAND_LOCALS or name in COMMAND_GLOBALS:
         msg = f"input `{name}` would shadow `{name}`, which the emitted command itself uses — rename it in the method, or write the command by hand."
+        raise Refusal(msg)
+    if name in BUILTIN_NAMES:
+        msg = (
+            f"input `{name}` is spelled like a Python builtin, a parameter `make agent-check` refuses (ruff A002) — "
+            "rename it in the method, or write the command by hand."
+        )
         raise Refusal(msg)
     help_text = literal(field.description or field.title or name)
     flag = "--" + name.replace("_", "-")
@@ -686,6 +703,15 @@ def build_plan(*, report: PipelexValidationReport, selector: MethodSelector, slu
                 f"so `{names.slug}` would replace it — pass NAME=<other-name>."
             )
             raise Refusal(msg)
+    if names.command in BUILTIN_NAMES:
+        msg = (
+            f"`{names.command}` is a Python builtin, and a command named after it would replace it "
+            f"for the whole of {mode_label} — pass NAME=<other-name>."
+        )
+        raise Refusal(msg)
+    if names.slug in LIFECYCLE_COMMANDS:
+        msg = f"`{names.slug}` is a run-lifecycle command of `piper detached`, a name no other mode may carry — pass NAME=<other-name>."
+        raise Refusal(msg)
     # Checked here, in the read-only half, so a mode file that lost an anchor refuses before the
     # manifest and the generated tree are on disk rather than halfway through the write.
     for anchor in (IMPORT_ANCHOR, COMMAND_ANCHOR):
