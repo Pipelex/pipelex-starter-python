@@ -17,6 +17,8 @@ make add-method METHOD=github.com/Pipelex/methods/text_stats@v0.1.1
 
 It is out of every offline gate for the same reason `make codegen` is: it needs a key and a network.
 
+The Make variables are read **from the command line only** — `make add-method NAME=invoice-triage`, never `NAME=invoice-triage make add-method`. Make imports every environment variable as a make variable, and WSL exports `NAME` as the machine's hostname, so reading the environment would scaffold under the hostname there.
+
 `METHOD` is the one required argument, and it is one of two forms:
 
 - **A catalog id** — `mt_…`, a method saved under your key's organization on [app.pipelex.com](https://app.pipelex.com). Sent as `method_id`.
@@ -40,14 +42,16 @@ For `METHOD=github.com/Pipelex/methods/text_stats@v0.1.1`, with no other argumen
 ```
 piper/methods/text-stats/method.json       # { "method_ref": "github.com/Pipelex/methods/text_stats@v0.1.1" }
 piper/generated/text_stats/                # models.py, codegen.lock, __init__.py
-piper/attended/cli.py                      # one import line and one Typer command, at the anchors
+piper/attended/cli.py                      # its imports and one Typer command, at the anchors
 ```
 
 Three files rather than the JS starter's seven, and the difference is not a gap. A CLI has no narrower layer (a generated pydantic model narrows itself, with `Model.model_validate`), no action trio (the mode's own lifecycle helper is the action), no form (the command's parameters are the form) and no tab. What is left is exactly the manifest, the projection and the command.
 
 **Nothing is written until everything has been fetched and derived.** The run has a read-only half — parse the selector, validate the method, choose the pipe, derive every name, map every input, check every collision, confirm the anchors are in place and confirm the output model exists in the artifacts just fetched — and a write half that runs only once all of that has passed. Every refusal happens in the first half, with nothing on disk changed. `--dry-run` stops at the boundary and prints the plan.
 
-**The emitted command is formatted with this repo's own ruff** before the run reports success, so it lands `make agent-check`-clean. Its import is inserted in already-sorted position rather than fixed up afterwards, so `ruff check` has nothing to complain about either.
+**The write half writes all three or none.** The mode file's new text is built and compiled before anything touches the disk, and a failure after that — the SDK's writer refusing the tree, the filesystem refusing a write, a Ctrl-C — takes back what the run had written: the manifest's directory, the generated package and the mode file's original text. A half-written slice would otherwise be refused by the next run as a name that already exists, and read by `make codegen` as a method nobody finished adding.
+
+**The emitted command is formatted with this repo's own ruff** before the run reports success, so it lands `make agent-check`-clean. Its imports are inserted in already-sorted position rather than fixed up afterwards, so `ruff check` has nothing to complain about either. A ruff that cannot be found, cannot start or fails is reported as a note rather than a traceback: by then the slice is written in full and the mode file compiles, so what is missing is the formatting alone, which `make agent-check` applies.
 
 ## The manifest is the source
 
@@ -59,7 +63,7 @@ Three files rather than the JS starter's seven, and the difference is not a gap.
 
 It sits under `piper/methods/` rather than beside the generated tree, and that placement is the whole reason the second source kind cost `scripts/codegen.py` almost no new logic: `piper/methods/` stays the source of truth, `piper/generated/` stays purely derived, and `make codegen` regenerates a selector-sourced tree beside a bundle-sourced one instead of being a second regeneration path. A method directory holds either `.mthds` files or a `method.json`, never both — the two would disagree about where the tree came from, and the discovery refuses that naming it.
 
-**To move to another version of a published method, edit the tag and run `make codegen`.** That is the whole upgrade: the regenerated diff shows what the new tag changed, and a changed output shape surfaces as a type error against your command rather than as a surprise at run time.
+**To move to another version of a published method, edit the tag and run `make codegen`.** That is the whole upgrade: the regenerated diff shows what the new tag changed, and a changed output shape surfaces as a type error against your command rather than as a surprise at run time. It is the whole upgrade because the scaffolded command **reads `method.json` every time it runs** (`read_manifest`, from `piper/manifest.py`, the same reader `make codegen` uses) rather than carrying a copy of the selector — a copy would go on running the old version after the models had moved to the new one.
 
 ## One-shot, on purpose
 
@@ -74,6 +78,8 @@ Everything comes from one kebab-case slug.
 - **The slug** is `NAME` when given; otherwise the address's last path segment — the package, falling back to the repository for an address naming none — kebab-cased (`text_stats` → `text-stats`) and validated. A slug that cannot be a directory name, a command name and a Python package stem at once is a refusal here, not a broken import later.
 - **`text_stats`** (snake) names the generated package and the command function; **`text-stats`** (the slug) names the method directory and the command as you type it; **`TextStatsOutput`** aliases the generated model on import, so two methods that both project a concept called `Image` never collide in one mode file.
 
+**A derived name something else already uses is a refusal.** The command is a module-level function, so neither its name nor the model's alias may be a name the mode file already binds — an import, an assignment, a function — or one the emitted command itself reads, such as `start_and_wait`, `output_console` or `read_manifest`. `NAME=app` would otherwise replace the mode's `typer.Typer` instance and take the whole CLI down with it. The mode file is parsed to find those names, so a mode file that does not parse is refused too.
+
 **A catalog id needs `NAME=`.** The JS starter reads the catalog method's name for its slug; this one does not, because resolving an id to a name is a call to the hosted product surface (`GET /v1/methods/{id}`) and `piper` deliberately speaks only the protocol routes — `execute`, `start`, `validate`, `codegen`, the run lifecycle and the upload. Asking for one word is a smaller price than widening what the starter demonstrates.
 
 ## The pipe rule
@@ -85,7 +91,7 @@ A published package can carry several pipes, so the pipe is chosen by a rule tha
 3. The only pipe, when the method declares exactly one.
 4. Otherwise a refusal listing the pipes and asking for `PIPE`.
 
-The chosen ref is split at its last dot, and the **bare code** is what the command sends beside the selector, exactly as the demo commands send theirs.
+The command sends the chosen ref **qualified** (`pipe_code="stats.analyze_text"`) beside the selector. A bare code would be ambiguous in exactly the case step 1 refuses to guess at — a code two domains of the method both declare — and the runtime resolves a `domain.pipe_code` directly, so the qualified ref is right on every path. The demo commands send bare codes because their bundles have one domain each.
 
 ## The command's parameters are the method's inputs
 
@@ -99,6 +105,8 @@ Each top-level input of the chosen pipe becomes one Typer parameter, typed from 
 | `document`             | `Path`, existence-checked by Typer, uploaded with `upload_document_input` before the run |
 
 A **required** input is a positional argument (a required boolean is a required flag); an **optional** one is an option defaulting to `None` and is left out of the run inputs entirely when it is not given. Required parameters are emitted first because Python demands it, and within each group the method's own authored input order is kept — which is what the input-form descriptor exists to carry.
+
+**An input spelled like a name the command uses is refused**, naming the input: a parameter called `start_and_wait` would shadow the lifecycle helper inside the command and turn the run into `'str' object is not callable`. The names are `COMMAND_LOCALS` and `COMMAND_GLOBALS` in `scripts/add_method.py`, and `tests/unit/test_add_method.py` parses every shape of emitted command to keep that list complete.
 
 **Four kinds are refused rather than guessed at**, each naming the input and why: `object` and `list`, because a nested value has no honest spelling as a command-line flag and inventing a JSON encoding for it would be the hand-written input shape this starter never writes; `image`, because the starter uploads documents and has no image-input envelope to copy; and `unknown`, because the method itself is reporting that it cannot say what the input is. In each case the remedy is the same: write that command by hand from the generated model, the way the three demos are written.
 
@@ -139,7 +147,7 @@ The import goes into the `from piper.…` block in sorted position, above the fi
 
 ## Removing a scaffolded slice
 
-In one commit, delete `piper/methods/<slug>/` and `piper/generated/<package>/` together — the drift gate fails on either half without the other — then the command and its import from `piper/<mode>/cli.py`, leaving both anchors in place. Then `make agent-check` and `make agent-test`.
+In one commit, delete `piper/methods/<slug>/` and `piper/generated/<package>/` together — the drift gate fails on either half without the other — then the command and its model import from `piper/<mode>/cli.py`, leaving both anchors in place — and the `piper.manifest` import too, unless another scaffolded command in that file still reads a manifest. Then `make agent-check` and `make agent-test`.
 
 ## What this deliberately does not do
 

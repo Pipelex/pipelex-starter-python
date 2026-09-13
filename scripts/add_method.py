@@ -13,13 +13,19 @@ the execution mode you chose:
 
     piper/methods/<slug>/method.json          the selector, and nothing else
     piper/generated/<package>/models.py       stamped, plus codegen.lock and __init__.py
-    piper/<mode>/cli.py                       one import line and one command, at the anchors
+    piper/<mode>/cli.py                       its imports and one command, at the anchors
 
 **Nothing is written until everything has been fetched and derived.** The run has a read-only
 half — parse the selector, validate the method, choose the pipe, derive every name, map every
 input, check every collision and locate the anchors — and a write half that runs only once all
 of that has passed. Every refusal happens in the first half with nothing on disk changed, and
-`--dry-run` stops at the boundary and prints the plan.
+`--dry-run` stops at the boundary and prints the plan. The write half writes all three or none:
+a failure inside it takes back what it had written, so a failed run never leaves a half-added
+method for the next run to refuse and for `make codegen` to pick up.
+
+The command it writes reads the selector from `method.json` every time it runs, rather than
+carrying a copy of it, so editing the manifest's tag and running `make codegen` moves the models
+and the run to the new version together.
 
 It is one-shot, like its JS twin: it never overwrites, and `make codegen` is the refresh. The
 command it writes is yours from the moment it lands — edit it, rename it, split it; nothing
@@ -32,6 +38,7 @@ the two are deliberate and documented in `docs/add-method.md`.
 from __future__ import annotations
 
 import argparse
+import ast
 import asyncio
 import keyword
 import os
@@ -50,19 +57,8 @@ from pipelex_sdk.crate_models import CodegenValidReport
 from pipelex_sdk.errors import CodegenError
 from pipelex_sdk.validation_models import VALIDATION_VIEW_INPUT_FORM, PipelexValidationReport
 
-from scripts.codegen import (
-    MANIFEST_FILENAME,
-    METHODS_DIR,
-    REPO_ROOT,
-    SELECTOR_METHOD_ID,
-    SELECTOR_METHOD_REF,
-    MethodSelector,
-    MethodSource,
-    explain,
-    generated_package_dir,
-    insecure_base_url_reason,
-    write_manifest,
-)
+from piper.manifest import MANIFEST_FILENAME, SELECTOR_METHOD_ID, SELECTOR_METHOD_REF, MethodSelector, write_manifest
+from scripts.codegen import METHODS_DIR, REPO_ROOT, MethodSource, explain, generated_package_dir, insecure_base_url_reason
 
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -76,6 +72,33 @@ EXIT_INTERRUPTED = 130
 MODES = ("blocking", "attended", "detached")
 DEFAULT_MODE = "attended"
 MODE_HELPERS = {"blocking": "execute_pipe", "attended": "start_and_wait", "detached": "start_pipe"}
+
+#: The names an emitted command binds inside its own body. An input parameter spelled like one of
+#: them would be overwritten before it is read, or would overwrite what the body relies on.
+COMMAND_LOCALS = frozenset({"selector", "run_inputs", "main_stuff", "usage", "items", "item", "run_id"})
+
+#: The module-level names an emitted command reads, beside the generated model's alias: the
+#: lifecycle helpers, the run wrapper, the consoles, the mode file's `METHODS_DIR` and what the
+#: emitted import lines bring in. An input parameter spelled like one of them shadows it inside the
+#: command — an input named `start_and_wait` turns the call into `'str' object is not callable` —
+#: and a command named like one of them replaces it for the whole mode file. The set is kept honest
+#: by `tests/unit/test_add_method.py`, which parses every shape of emitted command and fails when
+#: its body reads a name that is neither a parameter nor listed here.
+COMMAND_GLOBALS = frozenset(
+    {
+        "METHODS_DIR",
+        "MANIFEST_FILENAME",
+        "read_manifest",
+        "_run",
+        "_print_run_id",
+        "upload_document_input",
+        "list_items",
+        "output_console",
+        "progress_console",
+        "print_cost_report",
+        *MODE_HELPERS.values(),
+    }
+)
 
 #: The two anchor tokens each `piper/<mode>/cli.py` carries. The match is on the token alone, so
 #: the prose after it is free to be reworded — but the tokens themselves must not move or be
@@ -145,7 +168,6 @@ class Plan(NamedTuple):
     selector: MethodSelector
     mode: str
     pipe_ref: str
-    pipe_code: str
     parameters: list[Parameter]
     model_name: str
     is_plural: bool
@@ -323,8 +345,11 @@ def build_parameter(field: InputFormField) -> Parameter:
         )
         raise Refusal(msg)
     name = field.name
-    if not name.isidentifier() or keyword.iskeyword(name) or name in {"run_inputs", "main_stuff", "usage", "run_id"}:
+    if not name.isidentifier() or keyword.iskeyword(name):
         msg = f"input `{name}` cannot be a Python parameter of the emitted command — rename it in the method, or write the command by hand."
+        raise Refusal(msg)
+    if name in COMMAND_LOCALS or name in COMMAND_GLOBALS:
+        msg = f"input `{name}` would shadow `{name}`, which the emitted command itself uses — rename it in the method, or write the command by hand."
         raise Refusal(msg)
     help_text = literal(field.description or field.title or name)
     flag = "--" + name.replace("_", "-")
@@ -392,6 +417,38 @@ def output_model_name(*, report: PipelexValidationReport, pipe_ref: str) -> tupl
     return output.concept_ref.rsplit(".", 1)[-1], output.multiplicity.is_plural
 
 
+def module_bindings(*, text: str, label: str) -> set[str]:
+    """Every name a mode file binds at module level: its imports, assignments, functions and classes.
+
+    A command is a module-level `def`, so a command named like any of these replaces it for the
+    whole file — `NAME=app` would replace the mode's `typer.Typer` instance and take the root CLI
+    down with it. Names bound inside a compound statement at module level (an `if`, a `try`)
+    count too; names bound inside a module-level function or class do not, since a `def` beside
+    them does not reach them.
+
+    Raises:
+        Refusal: The mode file does not parse, so nothing can be inserted into it safely.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError as exc:
+        msg = f"{label} does not parse (line {exc.lineno}: {exc.msg}) — fix it before scaffolding into it."
+        raise Refusal(msg) from exc
+    bound: set[str] = set()
+    for statement in tree.body:
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(statement.name)
+            continue
+        for node in ast.walk(statement):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bound.add(node.name)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                bound.update((alias.asname or alias.name).split(".", 1)[0] for alias in node.names)
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                bound.add(node.id)
+    return bound
+
+
 # ── Emitting the command ────────────────────────────────────────────────────────────────
 
 
@@ -401,8 +458,14 @@ def build_command_source(plan: Plan) -> str:
     Every fact in it comes from the method's own contract: the parameters from the input-form
     descriptor, the narrowing from the output contract, the selector from the manifest. Nothing
     is a shape written by hand, which is the same rule the demos follow.
+
+    The selector is **read from `method.json` when the command runs**, never copied into it: a
+    copy would keep running the old version after the documented upgrade — edit the tag, run
+    `make codegen` — had moved the models to the new one. The pipe is sent **qualified**, as the
+    ref the pipe rule chose: a bare code is ambiguous exactly when the method declares it in two
+    domains, which is the case the rule already refused to guess at, and the runtime resolves a
+    `domain.pipe_code` directly.
     """
-    selector_kwarg = f'method_id="{plan.selector.method_id}"' if plan.selector.method_id is not None else f'method_ref="{plan.selector.method_ref}"'
     helper = MODE_HELPERS[plan.mode]
     lines = [
         f'@app.command(name="{plan.names.slug}")',
@@ -412,12 +475,14 @@ def build_command_source(plan: Plan) -> str:
         f'    """Run `{plan.pipe_ref}`.',
         "",
         "    Scaffolded by `make add-method` and yours to edit from here — nothing regenerates it.",
+        f"    The method is whatever `piper/methods/{plan.names.slug}/method.json` names when this runs, and",
         "    `make codegen` refreshes the generated models this narrows into, and nothing else.",
         '    """',
+        f'    selector = read_manifest(METHODS_DIR / "{plan.names.slug}" / MANIFEST_FILENAME)',
         "    run_inputs: dict[str, Any] = {}",
         *[line for parameter in plan.parameters for line in parameter.assignment],
     ]
-    call = f'{helper}(pipe_code="{plan.pipe_code}", {selector_kwarg}, inputs=run_inputs)'
+    call = f'{helper}(pipe_code="{plan.pipe_ref}", method_id=selector.method_id, method_ref=selector.method_ref, inputs=run_inputs)'
     if plan.mode == "detached":
         lines += [f"    run_id = _run({call})", "    _print_run_id(run_id)"]
     elif plan.is_plural:
@@ -439,12 +504,13 @@ def build_command_source(plan: Plan) -> str:
 def import_lines(plan: Plan) -> list[str]:
     """The imports the emitted command needs, in whatever order — they are sorted on insertion.
 
-    Detached narrows nothing (its demos print the run id and collect it later by id), so it needs
-    no generated model and no list reader.
+    Every mode reads the manifest. Detached narrows nothing (its demos print the run id and
+    collect it later by id), so it needs no generated model and no list reader.
     """
+    lines = ["from piper.manifest import MANIFEST_FILENAME, read_manifest"]
     if plan.mode == "detached":
-        return []
-    lines = [f"from piper.generated.{plan.names.package}.models import {plan.model_name} as {plan.names.model_alias}"]
+        return lines
+    lines.append(f"from piper.generated.{plan.names.package}.models import {plan.model_name} as {plan.names.model_alias}")
     if plan.is_plural:
         lines.append("from piper.outputs import list_items")
     return lines
@@ -488,42 +554,84 @@ def insert_into_mode_file(*, text: str, imports: list[str], command_source: str)
 def format_with_ruff(path: Path) -> str | None:
     """Format one emitted file with this project's own ruff, so it lands `make check`-clean.
 
-    Returns what went wrong when it could not run, so the caller can say so rather than leave a
-    file nobody warned about. A ruff that runs and fails is a real failure and propagates.
+    Returns what went wrong when ruff could not be found, could not be started or failed, so the
+    caller can say so rather than leave a file nobody warned about. None of those is a failure of
+    the scaffold: the slice is already written in full and `write_slice` compiled the mode file
+    before writing it, so what is missing is the formatting alone, which `make agent-check` applies.
     """
     ruff = Path(sys.executable).parent / "ruff"
     executable = str(ruff) if ruff.is_file() else shutil.which("ruff")
     if executable is None:
         return "ruff was not found — run `make agent-check` to format the file this run touched."
-    subprocess.run([executable, "format", str(path)], check=True, cwd=REPO_ROOT)
+    try:
+        subprocess.run([executable, "format", str(path)], check=True, cwd=REPO_ROOT)
+    except subprocess.CalledProcessError as exc:
+        return (
+            f"ruff format exited {exc.returncode} on {path.relative_to(REPO_ROOT)} — "
+            "the command is written and parses; run `make agent-check` to format it."
+        )
+    except OSError as exc:
+        return f"ruff could not be started ({exc}) — run `make agent-check` to format the file this run touched."
     return None
 
 
 def write_slice(*, plan: Plan, report: CodegenValidReport) -> list[str]:
-    """Write the manifest, the generated tree and the command. Returns what changed, in order."""
+    """Write the manifest, the generated tree and the command — all three, or none. Returns what changed, in order.
+
+    The mode file's new text is built and compiled before anything touches the disk, so a command
+    that would not parse writes nothing. A failure after that — the codegen writer refusing the
+    tree, the filesystem refusing a write, a Ctrl-C — takes back what this run wrote: the two
+    directories it created, which `build_plan` refused to go on without being new and which
+    `mkdir` refuses again here if one has appeared since, and the mode file's original text. A
+    half-written slice would otherwise be refused by the next run as a name that already exists,
+    and read by `make codegen` as a method nobody finished adding.
+
+    Raises:
+        Refusal: The mode file would not parse with the command in it.
+        CodegenError: The codegen writer refused the tree.
+        OSError: The filesystem refused a write, or a directory appeared since the plan was made.
+    """
+    original_mode_text = plan.mode_file.read_text(encoding="utf-8")
+    merged_mode_text = insert_into_mode_file(text=original_mode_text, imports=import_lines(plan), command_source=build_command_source(plan))
+    try:
+        compile(merged_mode_text, str(plan.mode_file), "exec")
+    except SyntaxError as exc:
+        msg = f"{plan.mode_file.relative_to(REPO_ROOT)} would not parse with the command in it (line {exc.lineno}: {exc.msg})."
+        raise Refusal(msg) from exc
+
     changed: list[str] = []
-    plan.method_dir.mkdir(parents=True)
-    manifest_path = plan.method_dir / MANIFEST_FILENAME
-    write_manifest(manifest_path, plan.selector)
-    changed.append(f"wrote {manifest_path.relative_to(REPO_ROOT)}")
+    created: list[Path] = []
+    mode_file_written = False
+    completed = False
+    try:
+        for directory in (plan.method_dir, plan.generated_dir):
+            directory.mkdir(parents=True)
+            created.append(directory)
+        manifest_path = plan.method_dir / MANIFEST_FILENAME
+        write_manifest(manifest_path, plan.selector)
+        changed.append(f"wrote {manifest_path.relative_to(REPO_ROOT)}")
 
-    written = write_codegen_tree(report, output_dir=plan.generated_dir)
-    changed += [f"wrote {path}" for path in written.written]
-    if written.lock_written:
-        changed.append("wrote codegen.lock")
-    # Codegen never emits `__init__.py`: it carries no stamp, so the writer does not own it and
-    # the drift check does not count it as an orphan. The package still has to be importable.
-    init_path = plan.generated_dir / "__init__.py"
-    if not init_path.exists():
-        init_path.touch()
-        changed.append(f"wrote {init_path.relative_to(REPO_ROOT)}")
+        written = write_codegen_tree(report, output_dir=plan.generated_dir)
+        changed += [f"wrote {path}" for path in written.written]
+        if written.lock_written:
+            changed.append("wrote codegen.lock")
+        # Codegen never emits `__init__.py`: it carries no stamp, so the writer does not own it and
+        # the drift check does not count it as an orphan. The package still has to be importable.
+        init_path = plan.generated_dir / "__init__.py"
+        if not init_path.exists():
+            init_path.touch()
+            changed.append(f"wrote {init_path.relative_to(REPO_ROOT)}")
 
-    mode_text = plan.mode_file.read_text(encoding="utf-8")
-    plan.mode_file.write_text(
-        insert_into_mode_file(text=mode_text, imports=import_lines(plan), command_source=build_command_source(plan)),
-        encoding="utf-8",
-    )
-    changed.append(f"wrote the `{plan.names.slug}` command into {plan.mode_file.relative_to(REPO_ROOT)}")
+        mode_file_written = True
+        plan.mode_file.write_text(merged_mode_text, encoding="utf-8")
+        changed.append(f"wrote the `{plan.names.slug}` command into {plan.mode_file.relative_to(REPO_ROOT)}")
+        completed = True
+    finally:
+        if not completed:
+            for directory in created:
+                shutil.rmtree(directory)
+            if mode_file_written:
+                plan.mode_file.write_text(original_mode_text, encoding="utf-8")
     return changed
 
 
@@ -531,7 +639,7 @@ def print_plan(plan: Plan) -> None:
     """Print everything the read-only half derived, in the order the write half would write it."""
     origin = plan.selector.method_id or plan.selector.method_ref
     print(f"\nadd-method: {plan.names.slug} — {origin}")
-    print(f"    pipe    {plan.pipe_ref} (sent as pipe_code={plan.pipe_code!r})")
+    print(f"    pipe    {plan.pipe_ref}")
     print(f"    mode    piper {plan.mode} {plan.names.slug}")
     print(f"    output  {plan.model_name}{' (plural)' if plan.is_plural else ''}")
     inputs = ", ".join(f"{parameter.name}: {parameter.annotation}{'' if parameter.required else ' (optional)'}" for parameter in plan.parameters)
@@ -554,7 +662,10 @@ def build_plan(*, report: PipelexValidationReport, selector: MethodSelector, slu
     model_name, is_plural = output_model_name(report=report, pipe_ref=pipe_ref)
     method_dir = METHODS_DIR / names.slug
     generated_dir = generated_package_dir(names.slug)
-    mode_file = REPO_ROOT / "piper" / mode / "cli.py"
+    # One string, the package name followed by a slash: the `/bootstrap` skill rewrites `piper/`
+    # to the project's package name, but a lone `"piper"` to its distribution name, which is not
+    # a directory. The same rule `scripts/codegen.py` spells `METHODS_DIR` by.
+    mode_file = REPO_ROOT / f"piper/{mode}/cli.py"
     for path in (method_dir, generated_dir):
         if path.exists():
             msg = (
@@ -563,22 +674,35 @@ def build_plan(*, report: PipelexValidationReport, selector: MethodSelector, slu
             )
             raise Refusal(msg)
     mode_text = mode_file.read_text(encoding="utf-8")
-    if f'@app.command(name="{names.slug}")' in mode_text or f"def {names.command}(" in mode_text:
+    mode_label = str(mode_file.relative_to(REPO_ROOT))
+    if f'@app.command(name="{names.slug}")' in mode_text:
         msg = f"`piper {mode}` already has a `{names.slug}` command — pass NAME=<other-name>."
         raise Refusal(msg)
+    taken = module_bindings(text=mode_text, label=mode_label)
+    for derived in (names.command, names.model_alias):
+        if derived in taken or derived in COMMAND_GLOBALS:
+            msg = (
+                f"`{derived}` is already a name {mode_label} or the emitted command uses, "
+                f"so `{names.slug}` would replace it — pass NAME=<other-name>."
+            )
+            raise Refusal(msg)
     # Checked here, in the read-only half, so a mode file that lost an anchor refuses before the
     # manifest and the generated tree are on disk rather than halfway through the write.
     for anchor in (IMPORT_ANCHOR, COMMAND_ANCHOR):
         if anchor not in mode_text:
-            msg = f"{mode_file.relative_to(REPO_ROOT)} has lost its `{anchor}` anchor — restore it before scaffolding."
+            msg = f"{mode_label} has lost its `{anchor}` anchor — restore it before scaffolding."
+            raise Refusal(msg)
+    parameters = build_parameters(report=report, pipe_ref=pipe_ref)
+    for parameter in parameters:
+        if parameter.name == names.model_alias:
+            msg = f"input `{parameter.name}` would shadow the generated model the command narrows into — pass NAME=<other-name>."
             raise Refusal(msg)
     return Plan(
         names=names,
         selector=selector,
         mode=mode,
         pipe_ref=pipe_ref,
-        pipe_code=pipe_ref.rsplit(".", 1)[-1],
-        parameters=build_parameters(report=report, pipe_ref=pipe_ref),
+        parameters=parameters,
         model_name=model_name,
         is_plural=is_plural,
         method_dir=method_dir,

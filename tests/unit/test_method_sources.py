@@ -22,6 +22,8 @@ import httpx
 import pytest
 from pipelex_sdk.errors import ApiResponseError
 
+from piper.manifest import ManifestError, MethodSelector, read_manifest, write_manifest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -40,14 +42,14 @@ ADDRESS = "github.com/Pipelex/methods/text_stats@v0.1.1"
 class TestMethodSources:
     def test_a_manifest_round_trips_an_address(self, tmp_path: Path):
         path = tmp_path / "method.json"
-        codegen.write_manifest(path, codegen.MethodSelector(method_ref=ADDRESS))
-        assert codegen.read_manifest(path) == codegen.MethodSelector(method_ref=ADDRESS)
+        write_manifest(path, MethodSelector(method_ref=ADDRESS))
+        assert read_manifest(path) == MethodSelector(method_ref=ADDRESS)
         assert "method_id" not in path.read_text()
 
     def test_a_manifest_round_trips_a_catalog_id(self, tmp_path: Path):
         path = tmp_path / "method.json"
-        codegen.write_manifest(path, codegen.MethodSelector(method_id="mt_abc123"))
-        assert codegen.read_manifest(path) == codegen.MethodSelector(method_id="mt_abc123")
+        write_manifest(path, MethodSelector(method_id="mt_abc123"))
+        assert read_manifest(path) == MethodSelector(method_id="mt_abc123")
 
     @pytest.mark.parametrize(
         "content",
@@ -64,8 +66,8 @@ class TestMethodSources:
     def test_a_manifest_that_does_not_name_exactly_one_method_is_refused(self, tmp_path: Path, content: str):
         path = tmp_path / "method.json"
         path.write_text(content)
-        with pytest.raises(codegen.ManifestError):
-            codegen.read_manifest(path)
+        with pytest.raises(ManifestError):
+            read_manifest(path)
 
     def test_a_bundle_directory_sends_every_mthds_file_under_it(self, tmp_path: Path):
         method_dir = tmp_path / "text-stats"
@@ -81,7 +83,7 @@ class TestMethodSources:
     def test_a_manifest_directory_sends_the_selector_instead(self, tmp_path: Path):
         method_dir = tmp_path / "text-stats"
         method_dir.mkdir()
-        codegen.write_manifest(method_dir / "method.json", codegen.MethodSelector(method_ref=ADDRESS))
+        write_manifest(method_dir / "method.json", MethodSelector(method_ref=ADDRESS))
         source = codegen.read_method_source(method_dir)
         assert source is not None
         assert source.files is None
@@ -99,15 +101,15 @@ class TestMethodSources:
         method_dir = tmp_path / "text-stats"
         method_dir.mkdir()
         (method_dir / "main.mthds").write_text("main_pipe = 'x'\n")
-        codegen.write_manifest(method_dir / "method.json", codegen.MethodSelector(method_ref=ADDRESS))
-        with pytest.raises(codegen.ManifestError, match="one source"):
+        write_manifest(method_dir / "method.json", MethodSelector(method_ref=ADDRESS))
+        with pytest.raises(ManifestError, match="one source"):
             codegen.read_method_source(method_dir)
 
     @pytest.mark.parametrize(
         ("selector", "expected"),
         [
-            (codegen.MethodSelector(method_ref=ADDRESS), "method_ref"),
-            (codegen.MethodSelector(method_id="mt_abc123"), "method_id"),
+            (MethodSelector(method_ref=ADDRESS), "method_ref"),
+            (MethodSelector(method_id="mt_abc123"), "method_id"),
         ],
     )
     def test_the_codegen_request_carries_exactly_one_selector(self, selector: Any, expected: str):

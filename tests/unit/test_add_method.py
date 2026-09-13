@@ -14,7 +14,10 @@ installed method.
 
 from __future__ import annotations
 
+import ast
 import importlib
+import importlib.util
+import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -35,10 +38,18 @@ from mthds.protocol.input_form import (
     TextItem,
 )
 from mthds.protocol.pipe_io_contracts import IOMultiplicity, PipeIOContract, PipeOutputContract, PresenceMarker
+from pipelex_sdk.crate_models import CodegenValidReport
+from pipelex_sdk.errors import CodegenError
 from pipelex_sdk.validation_models import PipelexValidationReport
+from pytest_mock import MockerFixture
+
+from piper.manifest import MethodSelector, write_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
-MODE_FILES = {mode: ROOT / "piper" / mode / "cli.py" for mode in ("blocking", "attended", "detached")}
+# One string per path, the package name followed by a slash: the `/bootstrap` skill rewrites a
+# lone `"piper"` to the distribution name, which is not a directory.
+MODE_FILES = {mode: ROOT / f"piper/{mode}/cli.py" for mode in ("blocking", "attended", "detached")}
+MANIFEST_IMPORT = "from piper.manifest import MANIFEST_FILENAME, read_manifest"
 
 PIPE_REF = "stats.analyze_text"
 ADDRESS = "github.com/Pipelex/methods/text_stats@v0.1.1"
@@ -84,11 +95,36 @@ def text_field(*, name: str = "text", required: bool = True) -> TextField:
 
 
 def build_plan(
-    *, mode: str = "attended", multiplicity: IOMultiplicity = IOMultiplicity.SINGLE, fields: Sequence[InputFormField] | None = None
+    *,
+    mode: str = "attended",
+    multiplicity: IOMultiplicity = IOMultiplicity.SINGLE,
+    fields: Sequence[InputFormField] | None = None,
+    slug: str = "text-stats",
 ) -> Any:
     report = build_report(fields=fields if fields is not None else [text_field()], multiplicity=multiplicity)
     selector = add_method.parse_selector(ADDRESS)
-    return add_method.build_plan(report=report, selector=selector, slug="text-stats", mode=mode, requested_pipe=None)
+    return add_method.build_plan(report=report, selector=selector, slug=slug, mode=mode, requested_pipe=None)
+
+
+def load_merged_mode_file(*, plan: Any, directory: Path) -> Any:
+    """Insert the plan's command into its real mode file and import the result as a module.
+
+    Imported from a file rather than executed from a string, so the emitted command runs with
+    exactly the globals its mode file gives it — which is what a shadowed name breaks.
+    """
+    merged = add_method.insert_into_mode_file(
+        text=MODE_FILES[plan.mode].read_text(),
+        imports=add_method.import_lines(plan),
+        command_source=add_method.build_command_source(plan),
+    )
+    path = directory / f"scaffolded_{plan.mode}.py"
+    path.write_text(merged)
+    spec = importlib.util.spec_from_file_location(f"scaffolded_{plan.mode}", path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class TestAddMethod:
@@ -109,6 +145,7 @@ class TestAddMethod:
         assert f"async def {add_method.MODE_HELPERS[mode]}(" in text
         assert "method_id: str | None = None" in text
         assert "method_ref: str | None = None" in text
+        assert "METHODS_DIR = " in text
 
     @pytest.mark.parametrize(
         ("raw", "expected"),
@@ -238,28 +275,44 @@ class TestAddMethod:
     def test_the_emitted_command_parses(self, mode: str):
         compile(add_method.build_command_source(build_plan(mode=mode)), "<emitted>", "exec")
 
-    def test_it_sends_the_selector_and_the_bare_pipe_code(self):
+    def test_it_reads_the_selector_from_the_manifest_and_sends_the_qualified_pipe(self):
+        """A bare code is ambiguous exactly when two domains declare it, which the pipe rule refused to guess at."""
         source = add_method.build_command_source(build_plan())
-        assert f'method_ref="{ADDRESS}"' in source
-        assert 'pipe_code="analyze_text"' in source
+        assert 'selector = read_manifest(METHODS_DIR / "text-stats" / MANIFEST_FILENAME)' in source
+        assert "method_id=selector.method_id, method_ref=selector.method_ref" in source
+        assert f'pipe_code="{PIPE_REF}"' in source
+        assert ADDRESS not in source
         assert "mthds_contents" not in source
 
-    def test_a_catalog_id_slice_sends_method_id(self):
-        report = build_report(fields=[text_field()])
-        plan = add_method.build_plan(
-            report=report,
-            selector=add_method.parse_selector("mt_abc123"),
-            slug="text-stats",
-            mode="attended",
-            requested_pipe=None,
+    @pytest.mark.parametrize(
+        "manifest", [MethodSelector(method_ref="github.com/Pipelex/methods/text_stats@v0.2.0"), MethodSelector(method_id="mt_abc123")]
+    )
+    def test_the_command_runs_whatever_the_manifest_names_when_it_runs(self, tmp_path: Path, mocker: MockerFixture, manifest: MethodSelector):
+        """The documented upgrade is "edit the tag, run `make codegen`", so the run has to move with the models.
+
+        The slice was scaffolded from `ADDRESS`; the manifest on disk now names something else, and
+        the run must send what the manifest names rather than what was scaffolded.
+        """
+        module = load_merged_mode_file(plan=build_plan(mode="detached"), directory=tmp_path)
+        method_dir = tmp_path / "methods" / "text-stats"
+        method_dir.mkdir(parents=True)
+        write_manifest(method_dir / "method.json", manifest)
+        start_pipe = mocker.AsyncMock(return_value="run-1")
+        mocker.patch.object(module, "METHODS_DIR", tmp_path / "methods")
+        mocker.patch.object(module, "start_pipe", start_pipe)
+        mocker.patch.object(module, "_print_run_id")
+
+        module.text_stats(text="hello")
+
+        start_pipe.assert_awaited_once_with(
+            pipe_code=PIPE_REF, method_id=manifest.method_id, method_ref=manifest.method_ref, inputs={"text": "hello"}
         )
-        assert 'method_id="mt_abc123"' in add_method.build_command_source(plan)
 
     def test_a_single_output_narrows_into_the_generated_model(self):
         plan = build_plan()
         source = add_method.build_command_source(plan)
         assert "TextStatsOutput.model_validate(main_stuff)" in source
-        assert add_method.import_lines(plan) == ["from piper.generated.text_stats.models import TextStats as TextStatsOutput"]
+        assert add_method.import_lines(plan) == [MANIFEST_IMPORT, "from piper.generated.text_stats.models import TextStats as TextStatsOutput"]
 
     def test_a_plural_output_goes_through_the_list_reader(self):
         """A plural output arrives as a bare array or an `items` envelope depending on the path."""
@@ -274,7 +327,7 @@ class TestAddMethod:
         source = add_method.build_command_source(plan)
         assert "_print_run_id(run_id)" in source
         assert "model_validate" not in source
-        assert add_method.import_lines(plan) == []
+        assert add_method.import_lines(plan) == [MANIFEST_IMPORT]
 
     @pytest.mark.parametrize("mode", sorted(MODE_FILES))
     def test_the_slice_lands_in_the_real_mode_file_and_still_parses(self, mode: str):
@@ -337,3 +390,97 @@ class TestAddMethod:
                 mode="attended",
                 requested_pipe=None,
             )
+
+    @pytest.mark.parametrize("mode", sorted(MODE_FILES))
+    @pytest.mark.parametrize("slug", ["app", "output-console", "asyncio", "typer", "start-and-wait", "read-manifest", "list-items"])
+    def test_a_command_named_like_a_name_the_mode_file_or_the_command_uses_is_refused(self, mode: str, slug: str):
+        """A command is a module-level `def`: `NAME=app` would replace the mode's Typer instance and take the root CLI down."""
+        with pytest.raises(add_method.Refusal, match="would replace it"):
+            build_plan(mode=mode, slug=slug)
+
+    @pytest.mark.parametrize("name", ["start_and_wait", "execute_pipe", "upload_document_input", "output_console", "_run", "selector", "run_inputs"])
+    def test_an_input_named_like_a_name_the_command_uses_is_refused(self, name: str):
+        """An attended command with a text input named `start_and_wait` would fail with `'str' object is not callable`."""
+        with pytest.raises(add_method.Refusal, match="shadow"):
+            add_method.build_parameter(text_field(name=name))
+
+    @pytest.mark.parametrize("mode", sorted(MODE_FILES))
+    @pytest.mark.parametrize("multiplicity", [IOMultiplicity.SINGLE, IOMultiplicity.VARIABLE])
+    def test_every_name_an_emitted_command_reads_is_a_parameter_or_reserved(self, mode: str, multiplicity: IOMultiplicity):
+        """What keeps `COMMAND_LOCALS` and `COMMAND_GLOBALS` honest: a template that starts reading a new name fails here."""
+        fields = [
+            DocumentField(name="invoice", required=True, presence=PresenceMarker.PLAIN, gating=True),
+            text_field(name="text"),
+            BooleanField(name="strict", required=False, presence=PresenceMarker.OPTIONAL, gating=False),
+            DocumentField(name="appendix", required=False, presence=PresenceMarker.OPTIONAL, gating=False),
+        ]
+        plan = build_plan(mode=mode, multiplicity=multiplicity, fields=fields)
+        function = ast.parse(add_method.build_command_source(plan)).body[0]
+        assert isinstance(function, ast.FunctionDef)
+        parameters = {parameter.name for parameter in plan.parameters}
+        read: set[str] = set()
+        bound: set[str] = set()
+        for statement in function.body:
+            # A local variable's annotation is never evaluated, so `run_inputs: dict[str, Any]` reads nothing.
+            parts = [statement.target, statement.value] if isinstance(statement, ast.AnnAssign) else [statement]
+            for node in (walked for part in parts if part is not None for walked in ast.walk(part)):
+                if isinstance(node, ast.Name):
+                    (bound if isinstance(node.ctx, ast.Store) else read).add(node.id)
+        assert read - parameters <= add_method.COMMAND_LOCALS | add_method.COMMAND_GLOBALS | {plan.names.model_alias}
+        assert bound <= add_method.COMMAND_LOCALS
+
+    def test_module_bindings_reads_imports_assignments_and_definitions(self):
+        bindings = add_method.module_bindings(text=MODE_FILES["attended"].read_text(), label="attended")
+        assert {
+            "app",
+            "output_console",
+            "progress_console",
+            "asyncio",
+            "typer",
+            "start_and_wait",
+            "_run",
+            "METHODS_DIR",
+            "upload_document_input",
+        } <= bindings
+
+    def test_a_mode_file_that_does_not_parse_is_refused(self):
+        with pytest.raises(add_method.Refusal, match="does not parse"):
+            add_method.module_bindings(text="def broken(:\n", label="piper/attended/cli.py")
+
+    def test_a_failed_write_takes_back_everything_it_wrote(self, tmp_path: Path, mocker: MockerFixture):
+        """A half-written slice would be refused by the next run as a name that already exists, and read by `make codegen`."""
+        mode_file = tmp_path / "cli.py"
+        original = MODE_FILES["attended"].read_text()
+        mode_file.write_text(original)
+        plan = build_plan()._replace(
+            method_dir=tmp_path / "methods" / "text-stats", generated_dir=tmp_path / "generated" / "text_stats", mode_file=mode_file
+        )
+        mocker.patch.object(add_method, "REPO_ROOT", tmp_path)
+        # A lock under another name is refused by the SDK's own writer, once the manifest is already on disk.
+        report = CodegenValidReport(
+            is_valid=True,
+            kind="types",
+            target="python-pydantic",
+            crate_fingerprint="sha256:0",
+            engine_version="0.0.0",
+            artifacts=[],
+            lock="",
+            lock_filename="other.lock",
+            message="",
+        )
+
+        with pytest.raises(CodegenError):
+            add_method.write_slice(plan=plan, report=report)
+
+        assert not plan.method_dir.exists()
+        assert not plan.generated_dir.exists()
+        assert mode_file.read_text() == original
+
+    def test_a_ruff_that_fails_is_a_note_not_a_traceback(self, mocker: MockerFixture):
+        """The slice is written and compiled by then, so only the formatting is missing."""
+        mocker.patch.object(add_method.shutil, "which", return_value="ruff")
+        mocker.patch.object(add_method.subprocess, "run", side_effect=subprocess.CalledProcessError(returncode=2, cmd=["ruff", "format"]))
+        note = add_method.format_with_ruff(MODE_FILES["attended"])
+        assert note is not None
+        assert "exited 2" in note
+        assert "make agent-check" in note

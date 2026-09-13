@@ -237,12 +237,20 @@ codegen-check:
 # address) into the CLI: the manifest, the generated tree, and one Typer command in the execution
 # mode you chose. One-shot — it never overwrites, and `make codegen` is the refresh. Keyed and
 # online, so it is no more part of an offline gate than `codegen` is. See docs/add-method.md.
+# Its arguments are read from the make command line only: make imports every environment variable
+# as a make variable, and WSL exports `NAME` as the machine's hostname, so a plain
+# `make add-method METHOD=…` there would otherwise scaffold under the hostname.
+ADD_METHOD_ARG = $(if $(filter command line,$(origin $(1))),$($(1)))
 add-method: env
-	@if [ -z "$(METHOD)" ]; then \
+	@if [ -z "$(call ADD_METHOD_ARG,METHOD)" ]; then \
 		echo "usage: make add-method METHOD=<mt_… | github.com/owner/repo[/package][@tag]> [PIPE=<pipe_code>] [NAME=<dir-name>] [MODE=blocking|attended|detached] [DRY_RUN=1]"; \
 		exit 2; \
 	fi
-	@$(VENV_PYTHON) -m scripts.add_method $(METHOD) $(if $(PIPE),--pipe $(PIPE)) $(if $(NAME),--name $(NAME)) $(if $(MODE),--mode $(MODE)) $(if $(DRY_RUN),--dry-run)
+	@$(VENV_PYTHON) -m scripts.add_method "$(call ADD_METHOD_ARG,METHOD)" \
+		$(if $(call ADD_METHOD_ARG,PIPE),--pipe "$(call ADD_METHOD_ARG,PIPE)") \
+		$(if $(call ADD_METHOD_ARG,NAME),--name "$(call ADD_METHOD_ARG,NAME)") \
+		$(if $(call ADD_METHOD_ARG,MODE),--mode "$(call ADD_METHOD_ARG,MODE)") \
+		$(if $(call ADD_METHOD_ARG,DRY_RUN),--dry-run)
 
 ##############################################################################################
 ############################      Cleaning                        ############################
