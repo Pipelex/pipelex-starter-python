@@ -66,6 +66,7 @@ make erd                      - Shorthand -> export-requirements-dev
 make validate                 - Lint/validate the .mthds bundle with plxt
 make codegen                  - Regenerate the typed clients from the .mthds methods (needs PIPELEX_API_KEY)
 make codegen-check            - Verify the generated clients are current (offline, pure hashing)
+make add-method               - Scaffold a catalog or published method into the CLI (needs PIPELEX_API_KEY)
 
 make format                   - Format all (ruff-format + plxt-format)
 make lint                     - Lint all (ruff-lint + plxt-lint)
@@ -120,7 +121,7 @@ export HELP
 	test t test-quiet tq test-with-prints tp test-inference ti \
 	codex-tests gha-tests \
 	run-all-tests run-manual-trigger-gha-tests run-gha_disabled-tests \
-	validate v check c cc agent-check agent-test codegen codegen-check \
+	validate v check c cc agent-check agent-test codegen codegen-check add-method \
 	merge-check-ruff-lint merge-check-ruff-format merge-check-plxt-format merge-check-plxt-lint merge-check-mypy merge-check-pyright \
 	li check-unused-imports fix-unused-imports check-uv check-TODOs
 
@@ -219,7 +220,7 @@ validate: env
 # packages/package-data lists in pyproject.toml to ship.
 codegen: env
 	$(call PRINT_TITLE,"Regenerating typed clients from the .mthds methods")
-	@$(VENV_PYTHON) scripts/codegen.py
+	@$(VENV_PYTHON) -m scripts.codegen
 
 # Offline drift check: pure hashing against each codegen.lock — no engine boot, no network,
 # no API key. Exit 0 = current, 1 = drift (stale/hand-edited), 2 = no lock. This half is still
@@ -228,9 +229,20 @@ codegen: env
 # never against the bundle — only `make codegen` answers that.
 codegen-check:
 	$(call PRINT_TITLE,"Checking generated clients are current - offline")
-	@$(PIPELEX_RUN) codegen check piper/generated/extract_entities && \
-	$(PIPELEX_RUN) codegen check piper/generated/summarize_pdf && \
-	$(PIPELEX_RUN) codegen check piper/generated/generate_image
+	@set -e; for lock in piper/generated/*/codegen.lock; do \
+		$(PIPELEX_RUN) codegen check "$$(dirname "$$lock")"; \
+	done
+
+# Scaffolds a method that lives on the platform (a catalog id) or in a published package (an
+# address) into the CLI: the manifest, the generated tree, and one Typer command in the execution
+# mode you chose. One-shot — it never overwrites, and `make codegen` is the refresh. Keyed and
+# online, so it is no more part of an offline gate than `codegen` is. See docs/add-method.md.
+add-method: env
+	@if [ -z "$(METHOD)" ]; then \
+		echo "usage: make add-method METHOD=<mt_… | github.com/owner/repo[/package][@tag]> [PIPE=<pipe_code>] [NAME=<dir-name>] [MODE=blocking|attended|detached] [DRY_RUN=1]"; \
+		exit 2; \
+	fi
+	@$(VENV_PYTHON) -m scripts.add_method $(METHOD) $(if $(PIPE),--pipe $(PIPE)) $(if $(NAME),--name $(NAME)) $(if $(MODE),--mode $(MODE)) $(if $(DRY_RUN),--dry-run)
 
 ##############################################################################################
 ############################      Cleaning                        ############################

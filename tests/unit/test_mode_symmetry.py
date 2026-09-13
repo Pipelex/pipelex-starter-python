@@ -34,10 +34,20 @@ def _demo_signatures(mode_app: typer.Typer) -> dict[str, list[str]]:
 
 class TestModeSymmetry:
     def test_every_mode_exposes_every_demo(self):
-        assert _command_names(blocking_app) == DEMO_COMMANDS
-        assert _command_names(attended_app) == DEMO_COMMANDS
-        # Detached owns the run-lifecycle commands on top of the demos — nobody else has them.
-        assert _command_names(detached_app) == DEMO_COMMANDS | LIFECYCLE_COMMANDS
+        """Every demo is in every mode. A mode may hold more, and one mode alone holds the lifecycle.
+
+        The assertion is containment rather than equality because `make add-method` writes a
+        command into exactly one mode: a scaffolded command is a legitimate extra, and demanding
+        the three sets be equal would turn using the scaffolder into a test failure. What the
+        symmetry is actually about is unchanged — a demo present in one mode and missing from
+        another still fails here.
+        """
+        for mode_name, mode_app in MODE_APPS.items():
+            assert DEMO_COMMANDS <= _command_names(mode_app), mode_name
+        # Detached owns the run-lifecycle commands — nobody else has them.
+        assert LIFECYCLE_COMMANDS <= _command_names(detached_app)
+        assert not LIFECYCLE_COMMANDS & _command_names(blocking_app)
+        assert not LIFECYCLE_COMMANDS & _command_names(attended_app)
 
     def test_the_demos_take_the_same_arguments_in_every_mode(self):
         blocking_signatures = _demo_signatures(blocking_app)

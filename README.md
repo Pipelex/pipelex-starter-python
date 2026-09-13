@@ -275,11 +275,12 @@ piper/
   inputs.py                      # SHARED: text-or-file input, and file → upload → Document envelope
   errors.py                      # SHARED: maps SDK errors to CLI messages + hints
   usage.py                       # SHARED: reads per-call usage and prints the cost report (stderr)
-  generated/                     # typed clients generated from the bundles (`make codegen`) — do not edit
+  outputs.py                     # SHARED: reads a plural output's two wire shapes as one
+  generated/                     # typed clients generated from the methods (`make codegen`) — do not edit
     extract_entities/            #   models.py (stamped) + codegen.lock
     summarize_pdf/
     generate_image/
-  methods/                       # the method bundles (sent to the API as content)
+  methods/                       # the methods: a bundle on disk, or a manifest naming one that lives elsewhere
     extract-entities/            #   main.mthds (one file here, but a bundle may be several)
     summarize-pdf/
     generate-image/
@@ -294,6 +295,12 @@ tests/
 
 Only these modules are shared across the modes, and none knows anything about execution mode: see [docs/cli-architecture.md](docs/cli-architecture.md) for the sharing rule and the anatomy of a mode file.
 
+## Swap in your own method
+
+A method whose `.mthds` bundle you have goes under `piper/methods/<name>/`; then `make codegen` projects it into `piper/generated/<name>/` and you write the command, which is what the three demos show. A method that lives **on the platform** (a catalog id) or **in a published package** (an address) needs no bundle at all — `make add-method METHOD=<mt_… | github.com/owner/repo[/package][@tag]>` writes the manifest, the generated tree and the Typer command in one gesture. See [docs/add-method.md](docs/add-method.md) and [docs/codegen.md](docs/codegen.md).
+
+Taking this pattern into a codebase you already have is the [`/pipelex-integrate`](https://github.com/Pipelex/pipelex-plugins) skill's job rather than a checklist in this repo — [AGENTS.md](AGENTS.md) says why, and names the four files here to read if you would rather do it by hand.
+
 ## Useful commands
 
 ```bash
@@ -304,6 +311,7 @@ uv run piper detached wait <run-id>            # collect it later (also: detache
 make validate       # lint/validate the .mthds bundles with plxt (offline)
 make codegen        # regenerate the typed clients from the bundles (needs PIPELEX_API_KEY)
 make codegen-check  # verify the generated clients are current (offline, pure hashing)
+make add-method METHOD=github.com/owner/repo/package@v1.0.0   # scaffold a method that lives elsewhere
 make agent-check    # fix-imports + format + lint + pyright + mypy
 make agent-test     # offline test suite (silent on success)
 make test-inference # tests that hit the API (needs a key)

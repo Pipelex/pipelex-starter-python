@@ -28,6 +28,8 @@ from pipelex_sdk.client import PipelexAPIClient
 from pipelex_sdk.runs import PollInfo, RunRead, RunResultCompleted, RunResultFailed, RunResultRunning, RunResultState, WaitForResultOptions
 from rich.console import Console
 
+# add-method:imports — `make add-method` inserts a scaffolded method's generated-model import
+# into the block below, in sorted position. Keep the token; the prose after it is free.
 from piper.errors import present_error
 from piper.inputs import SAMPLE_ENTITIES_TEXT, SAMPLE_IMAGE_PROMPT, SAMPLE_INVOICE, read_text_input, upload_document_input
 from piper.usage import RunUsage, print_cost_report, usage_from_results
@@ -43,15 +45,33 @@ output_console = Console()
 progress_console = Console(stderr=True)
 
 
-async def start_pipe(*, pipe_code: str, mthds_contents: list[str], inputs: dict[str, Any]) -> str:
+async def start_pipe(
+    *,
+    pipe_code: str,
+    inputs: dict[str, Any],
+    mthds_contents: list[str] | None = None,
+    method_id: str | None = None,
+    method_ref: str | None = None,
+) -> str:
     """The whole detached lifecycle: start a durable run, return its id, don't wait.
 
-    Credentials come from `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`. `mthds_contents` is the
-    bundle's `.mthds` files as strings — one entry for a single-file bundle, several for a
-    multi-file one. The run keeps executing server-side after this process exits.
+    Credentials come from `PIPELEX_API_KEY` / `PIPELEX_BASE_URL`. The method arrives as exactly
+    one of three selectors, which is the SDK's own rule: inline `mthds_contents` (the bundle's
+    `.mthds` files as strings — one entry for a single-file bundle, several for a multi-file
+    one), a hosted catalog id (`method_id`), or a published address (`method_ref`). The demos
+    below send the bundle they ship; a command written by `make add-method` sends the selector
+    its `method.json` holds, and the SDK refuses a request carrying more than one.
+
+    The run keeps executing server-side after this process exits.
     """
     async with PipelexAPIClient() as client:
-        start_result = await client.start(pipe_code=pipe_code, mthds_contents=mthds_contents, inputs=inputs)
+        start_result = await client.start(
+            pipe_code=pipe_code,
+            mthds_contents=mthds_contents,
+            inputs=inputs,
+            method_id=method_id,
+            method_ref=method_ref,
+        )
     return start_result.pipeline_run_id
 
 
@@ -179,6 +199,10 @@ def _print_run_id(run_id: str) -> None:
 def _print_main_stuff(main_stuff: Any) -> None:
     """Print a run's main output as raw JSON — generic, since any run id can land here."""
     output_console.print_json(data=main_stuff)
+
+
+# add-method:commands — `make add-method` inserts a scaffolded method's command directly above
+# this line. Keep the token; the prose after it is free.
 
 
 def _run(coro: Coroutine[Any, Any, ResultT]) -> ResultT:

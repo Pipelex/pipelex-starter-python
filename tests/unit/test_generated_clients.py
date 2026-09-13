@@ -32,11 +32,24 @@ GENERATED_ROOT = REPO_ROOT / "piper/generated"
 
 
 def discover_method_dirs() -> list[str]:
-    """The methods, read off the filesystem exactly as `scripts/codegen.py` discovers them.
+    """Every method, read off the filesystem exactly as `scripts/codegen.py` discovers them.
 
     Derived rather than listed, so a method added under `piper/methods/` is gated by the next test
-    run instead of waiting for somebody to remember a second list.
+    run instead of waiting for somebody to remember a second list. Both source kinds count: a
+    bundle directory (`.mthds` files) and a manifest directory (`method.json`, written by
+    `make add-method` for a method that lives elsewhere) both project into a generated tree, and
+    the tree is what the drift gates below read.
     """
+    return sorted(path.name for path in METHODS_DIR.iterdir() if path.is_dir() and is_method_dir(path))
+
+
+def is_method_dir(path: Path) -> bool:
+    """Whether a directory under `piper/methods/` names a method, by either source kind."""
+    return any(path.rglob("*.mthds")) or (path / "method.json").is_file()
+
+
+def discover_bundle_dirs() -> list[str]:
+    """The methods whose source is a bundle on disk — the only ones with inputs to read locally."""
     return sorted(path.name for path in METHODS_DIR.iterdir() if path.is_dir() and any(path.rglob("*.mthds")))
 
 
@@ -49,7 +62,8 @@ def generated_dir_for(method_dir: str) -> Path:
 # symmetric on inputs, which `test_mode_symmetry.py` guards). Written by hand on purpose: this is
 # the CLI's half of the contract, and deriving it from the bundle would leave the bundle compared
 # against itself. It cannot go stale silently — `test_every_method_declares_its_cli_inputs` holds
-# it against the methods actually on disk.
+# it against the methods actually on disk. Bundle-sourced methods only: a scaffolded method's
+# inputs come from the method's own input-form descriptor, which is not on disk to read.
 CLI_INPUTS: dict[str, set[str]] = {
     "extract-entities": {"text"},
     "summarize-pdf": {"document"},
@@ -92,8 +106,8 @@ class TestGeneratedClients:
         assert "models.py" in lock.paths()
 
     def test_every_method_declares_its_cli_inputs(self):
-        """Every method on disk has a `CLI_INPUTS` entry, and every entry names a method that exists."""
-        assert set(CLI_INPUTS) == set(discover_method_dirs())
+        """Every bundle on disk has a `CLI_INPUTS` entry, and every entry names a bundle that exists."""
+        assert set(CLI_INPUTS) == set(discover_bundle_dirs())
 
     @pytest.mark.parametrize("method_dir", list(CLI_INPUTS))
     def test_bundle_declares_exactly_the_cli_inputs(self, method_dir: str):
