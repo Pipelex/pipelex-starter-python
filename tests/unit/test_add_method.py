@@ -15,14 +15,19 @@ installed method.
 from __future__ import annotations
 
 import ast
+import datetime
 import importlib
 import importlib.util
+import io
+import json
 import subprocess
 import sys
+import types
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import pydantic
 import pytest
 from mthds.protocol.input_form import (
     BooleanField,
@@ -42,6 +47,7 @@ from pipelex_sdk.crate_models import CodegenValidReport
 from pipelex_sdk.errors import CodegenError
 from pipelex_sdk.validation_models import PipelexValidationReport
 from pytest_mock import MockerFixture
+from rich.console import Console
 
 from piper.manifest import MethodSelector, write_manifest
 
@@ -312,6 +318,34 @@ class TestAddMethod:
         start_pipe.assert_awaited_once_with(
             pipe_code=PIPE_REF, method_id=manifest.method_id, method_ref=manifest.method_ref, inputs={"text": "hello"}
         )
+
+    @pytest.mark.parametrize("mode", ["blocking", "attended"])
+    @pytest.mark.parametrize("multiplicity", [IOMultiplicity.SINGLE, IOMultiplicity.VARIABLE])
+    def test_a_result_with_a_date_field_prints_as_json(self, tmp_path: Path, mocker: MockerFixture, mode: str, multiplicity: IOMultiplicity):
+        """A generated model reads a wire date as a `datetime.date`, which `print_json` cannot encode unless the dump is in JSON mode.
+
+        Without it the run is billed and the command then crashes on its own result.
+        """
+        plan = build_plan(mode=mode, multiplicity=multiplicity)
+        models = types.ModuleType("piper.generated.fixture_method.models")
+        models.TextStats = pydantic.create_model("TextStats", day=(datetime.date, ...))  # type: ignore[attr-defined]
+        mocker.patch.dict(
+            sys.modules, {"piper.generated.fixture_method": types.ModuleType("piper.generated.fixture_method"), models.__name__: models}
+        )
+        module = load_merged_mode_file(plan=plan, directory=tmp_path)
+        method_dir = tmp_path / "methods" / SLUG
+        method_dir.mkdir(parents=True)
+        write_manifest(method_dir / "method.json", MethodSelector(method_id="mt_abc123"))
+        main_stuff: Any = [{"day": "2026-09-13"}] if multiplicity.is_plural else {"day": "2026-09-13"}
+        output = io.StringIO()
+        mocker.patch.object(module, "METHODS_DIR", tmp_path / "methods")
+        mocker.patch.object(module, add_method.MODE_HELPERS[mode], mocker.AsyncMock(return_value=(main_stuff, None)))
+        mocker.patch.object(module, "output_console", Console(file=output))
+        mocker.patch.object(module, "print_cost_report")
+
+        module.fixture_method(text="hello")
+
+        assert json.loads(output.getvalue()) == main_stuff
 
     def test_a_single_output_narrows_into_the_generated_model(self):
         plan = build_plan()

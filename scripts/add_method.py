@@ -500,19 +500,21 @@ def build_command_source(plan: Plan) -> str:
         *[line for parameter in plan.parameters for line in parameter.assignment],
     ]
     call = f'{helper}(pipe_code="{plan.pipe_ref}", method_id=selector.method_id, method_ref=selector.method_ref, inputs=run_inputs)'
+    # Dumped in JSON mode: a generated model turns a date, datetime or time on the wire into a Python
+    # object, which `print_json` cannot encode — the run would be billed and then crash on its result.
     if plan.mode == "detached":
         lines += [f"    run_id = _run({call})", "    _print_run_id(run_id)"]
     elif plan.is_plural:
         lines += [
             f"    main_stuff, usage = _run({call})",
             f"    items = [{plan.names.model_alias}.model_validate(item) for item in list_items(main_stuff)]",
-            "    output_console.print_json(data=[item.model_dump() for item in items])",
+            '    output_console.print_json(data=[item.model_dump(mode="json") for item in items])',
             "    print_cost_report(progress_console, usage)",
         ]
     else:
         lines += [
             f"    main_stuff, usage = _run({call})",
-            f"    output_console.print_json(data={plan.names.model_alias}.model_validate(main_stuff).model_dump())",
+            f'    output_console.print_json(data={plan.names.model_alias}.model_validate(main_stuff).model_dump(mode="json"))',
             "    print_cost_report(progress_console, usage)",
         ]
     return "\n".join(lines) + "\n"

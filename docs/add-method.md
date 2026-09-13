@@ -112,7 +112,7 @@ A **required** input is a positional argument (a required boolean is a required 
 
 ## The output is narrowed by the generated model
 
-The command narrows `main_stuff` into the generated model for the pipe's output concept — `TextStatsOutput.model_validate(main_stuff)` — and prints it as JSON on stdout with the cost report on stderr, which is what every result-producing demo does.
+The command narrows `main_stuff` into the generated model for the pipe's output concept — `TextStatsOutput.model_validate(main_stuff)` — and prints it as JSON on stdout with the cost report on stderr, which is what every result-producing demo does. The model is dumped with `model_dump(mode="json")`: validation turns a date, datetime or time field into a Python object, which plain `model_dump()` would hand to `print_json` unencodable, so the command would crash on a result the run had already paid for.
 
 A **plural** output (a multiplicity other than `single`) goes through `piper/outputs.py`'s `list_items` first. That function exists because one plural output arrives in two shapes depending on the execution path rather than on the method: a `{"items": [...]}` envelope on the blocking path and on a durable run whose element concept the worker can hydrate, a bare array on a durable run of a concept the method declares itself. `list_items` accepts both and hands back the elements, so the generated model still owns the verdict on every element and no shape is declared anywhere in the command. It is the Python twin of `pipelex-starter-js`'s `wireListOutput`, and like it, a workaround with an expiry.
 
