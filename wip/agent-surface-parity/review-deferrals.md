@@ -5,7 +5,7 @@ item: L-260906-aa5083
 
 # `make add-method` — what the review rounds deferred
 
-Findings from the review rounds on `feature/Agent-surface-parity` that were deliberately not fixed on the branch. Each entry says which round deferred it, whether a verifier confirmed it, why it waited and what a fix would look like. The first two come from round 1 (profile 4, bar `open`); the rest come from round 2 (profile 4, bar `defects`), which reviewed `97ceac6`.
+Findings from the review rounds on `feature/Agent-surface-parity` that were deliberately not fixed on the branch. Each entry says which round deferred it, whether a verifier confirmed it, why it waited and what a fix would look like. The first two come from round 1 (profile 4, bar `open`); the next three from round 2 (profile 4, bar `defects`), which reviewed `97ceac6`; the last two from round 3.
 
 ## `make codegen-check` skips a generated tree whose lock was deleted
 
@@ -41,3 +41,17 @@ Findings from the review rounds on `feature/Agent-surface-parity` that were deli
 - **Finding (as reported):** two runs targeting the same mode can both read the original mode file before either writes, and the second write then replaces the whole file with its own snapshot, so the first command and its import disappear while both runs report success. A retry of the lost scaffold is refused because its method directory already exists.
 - **Why deferred:** it needs two scaffolds of the same mode running concurrently in one checkout, which is not how the gesture is used or documented. The recommended fix, a per-mode interprocess lock held across the read, the checks, the merge and the rollback, is more machinery than a starter template should carry for that case.
 - **What a fix looks like:** a cheaper guard first: re-read the mode file just before writing it and refuse, rolling back, when it no longer matches the text the plan was merged into. A lock only if that proves insufficient.
+
+## Two inputs can derive the same command-line flag
+
+- **Round:** 3 (profile 4, bar `necessity`, reviewing `669e364`). **Reporter:** cubic. **Unverified.**
+- **Finding (as reported):** the scaffolder checks that each input name is a usable Python identifier but never checks the flags derived from them. A boolean input `strict` emits `--strict/--no-strict`, so a second input named `no_strict` also emits `--no-strict`, and one of the two becomes unreachable. The report's other example, an optional input named `help` colliding with Typer's `--help`, is already refused by round 2's builtin check, since `help` is a builtin.
+- **Why deferred:** it needs two inputs whose names collide once a boolean's negative flag is derived, which is contrived for a method's inputs, and it is not a defect round 2's changes introduced.
+- **What a fix looks like:** collect every flag a plan derives, including each boolean's `--no-` form, and refuse a plan in which two parameters share one, naming both inputs.
+
+## A generated model that includes native `Date` cannot be imported, and a scaffolded import of it takes the whole CLI down
+
+- **Round:** 3. **Found by:** the verifier, while settling a finding about date outputs. **Verified** on pipelex 0.57.0.
+- **Finding:** when a method's concept closure contains native `Date`, the `python-pydantic` emitter writes `class Date(BaseModel)` with fields named `date` and `time`, which shadow the `datetime` types imported at the top of `models.py`. Importing the module fails with `TypeError: unsupported operand type(s) for |: 'FieldInfo' and 'NoneType'`. The scaffolder's pre-write check only looks for the class name, so it passes, and the import it inserts into `piper/<mode>/cli.py` then breaks that mode file. `piper/cli.py` imports all three modes eagerly, so every `piper` command, the demos included, stops working.
+- **Why deferred:** the defect is in the codegen emitter, which `pipelex` owns, and it predates this branch. It is filed on the workspace ledger against `pipelex` as `L-260913-8f1f22`. The scaffolder-side guard is an improvement, not a fix this bar admits.
+- **What a fix looks like here:** after writing the generated tree and before inserting the import, import the generated `models` module, and roll the whole slice back when it does not import, naming the error.
