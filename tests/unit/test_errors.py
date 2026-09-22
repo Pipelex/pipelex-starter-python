@@ -1,0 +1,137 @@
+from collections.abc import Mapping
+
+import httpx
+from pipelex_sdk.artifact_models import ArtifactScope, DownloadArtifactsResult
+from pipelex_sdk.errors import (
+    ApiUnreachableError,
+    ArtifactAuthenticationError,
+    ArtifactOperationError,
+    InvalidLocalSourceError,
+    PipelineExecuteTimeoutError,
+    RejectedAssetError,
+    RunFailedError,
+    RunLifecycleUnavailableError,
+    RunTimeoutError,
+    UnsupportedUploadCapabilityError,
+    UploadAuthenticationError,
+)
+from pipelex_sdk.runs import RunStatus
+
+from widget.errors import present_error
+
+
+def _http_status_error(status_code: int, *, problem: Mapping[str, object] | None = None) -> httpx.HTTPStatusError:
+    request = httpx.Request("POST", "https://api.pipelex.com/v1/start")
+    response = httpx.Response(status_code, request=request, json=problem) if problem is not None else httpx.Response(status_code, request=request)
+    return httpx.HTTPStatusError("boom", request=request, response=response)
+
+
+class TestPresentError:
+    def test_execute_timeout_hints_attended(self):
+        presentation = present_error(PipelineExecuteTimeoutError("timed out", elapsed_seconds=31.2))
+        assert "~30s" in presentation.message
+        assert presentation.hint is not None
+        assert "widget attended" in presentation.hint
+
+    def test_lifecycle_unavailable_hints_blocking(self):
+        presentation = present_error(RunLifecycleUnavailableError("no run store", api_url="http://localhost:8000"))
+        assert "http://localhost:8000" in presentation.message
+        assert presentation.hint is not None
+        assert "widget blocking" in presentation.hint
+
+    def test_http_auth_error_hints_api_key(self):
+        # The protocol routes (execute/start/runs) raise raw httpx.HTTPStatusError,
+        # not ApiResponseError — an auth failure must still get the key hint.
+        for status_code in (401, 403):
+            presentation = present_error(_http_status_error(status_code))
+            assert str(status_code) in presentation.message
+            assert presentation.hint is not None
+            assert "PIPELEX_API_KEY" in presentation.hint
+
+    def test_http_server_error_has_no_hint(self):
+        presentation = present_error(_http_status_error(500))
+        assert presentation.hint is None
+
+    def test_start_without_async_orchestration_hints_blocking(self):
+        # A synchronous-only runner rejects /start with this RFC 7807 error_type;
+        # the fix is to run the same demo under `widget blocking`.
+        problem = {
+            "error_type": "StartRequiresAsyncOrchestration",
+            "detail": "Orchestration mode 'direct' cannot honor fire-and-forget delivery. Use /execute instead.",
+            "status": 400,
+        }
+        presentation = present_error(_http_status_error(400, problem=problem))
+        assert "Orchestration mode 'direct'" in presentation.message
+        assert presentation.hint is not None
+        assert "widget blocking" in presentation.hint
+
+    def test_http_error_with_undecodable_body_falls_back_to_status(self):
+        # A non-UTF-8 body makes `response.json()` raise UnicodeDecodeError (not
+        # JSONDecodeError); the best-effort problem+json parse must still fall
+        # back to the status-only message instead of crashing mid-presentation.
+        request = httpx.Request("POST", "https://api.pipelex.com/v1/start")
+        response = httpx.Response(400, request=request, headers={"content-type": "application/problem+json"}, content=b"\xffnot-json")
+        presentation = present_error(httpx.HTTPStatusError("boom", request=request, response=response))
+        assert presentation.message == "The API answered 400 Bad Request."
+        assert presentation.hint is None
+
+    def test_http_error_surfaces_the_problem_detail(self):
+        problem = {"title": "Bad input", "detail": "Missing required input 'text'.", "status": 400}
+        presentation = present_error(_http_status_error(400, problem=problem))
+        assert "Missing required input 'text'." in presentation.message
+        assert presentation.hint is None
+
+    def test_unreachable_hints_base_url(self):
+        presentation = present_error(ApiUnreachableError("connect failed", api_url="http://nowhere.invalid"))
+        assert "http://nowhere.invalid" in presentation.message
+        assert presentation.hint is not None
+        assert "PIPELEX_BASE_URL" in presentation.hint
+
+    def test_run_failed_names_run_id(self):
+        presentation = present_error(RunFailedError("run failed", run_id="run-9", status=RunStatus.FAILED))
+        assert "run-9" in presentation.message
+        assert presentation.hint is not None
+        assert "widget detached status run-9" in presentation.hint
+
+    def test_run_timeout_hints_wait(self):
+        presentation = present_error(RunTimeoutError("too slow", run_id="run-9", timeout_seconds=1200.0))
+        assert presentation.hint is not None
+        assert "widget detached wait run-9" in presentation.hint
+
+    def test_unsupported_upload_capability_hints_the_hosted_api(self):
+        # summarize-pdf uploads the file; a runner without /v1/upload must point at the hosted API.
+        presentation = present_error(UnsupportedUploadCapabilityError("no /v1/upload route here"))
+        assert "no /v1/upload route here" in presentation.message
+        assert presentation.hint is not None
+        assert "PIPELEX_BASE_URL" in presentation.hint
+
+    def test_upload_authentication_hints_api_key(self):
+        presentation = present_error(UploadAuthenticationError("not authorized (401)", status=401))
+        assert presentation.hint is not None
+        assert "PIPELEX_API_KEY" in presentation.hint
+
+    def test_rejected_asset_hints_a_smaller_file(self):
+        presentation = present_error(RejectedAssetError("too large", filename="huge.pdf", status=413))
+        assert presentation.hint is not None
+        assert "smaller" in presentation.hint
+
+    def test_invalid_local_source_hints_the_path(self):
+        presentation = present_error(InvalidLocalSourceError("cannot read", source="/nope.pdf"))
+        assert presentation.hint is not None
+        assert "path" in presentation.hint
+
+    def test_artifact_authentication_hints_api_key(self):
+        # The download runs after the run was paid for, so a key that expired between the two gets
+        # the same actionable hint the upload family gets one step earlier — not a bare SDK string.
+        verdict = DownloadArtifactsResult(scope=ArtifactScope.MAIN_STUFF, all_saved=False)
+        presentation = present_error(ArtifactAuthenticationError("not authorized (401)", status=401, verdict=verdict))
+        assert presentation.hint is not None
+        assert "PIPELEX_API_KEY" in presentation.hint
+
+    def test_artifact_operation_hints_the_download_directory_without_saying_rerun(self):
+        presentation = present_error(ArtifactOperationError("downloads/ is a file"))
+        assert "downloads/ is a file" in presentation.message
+        assert presentation.hint is not None
+        assert "download directory" in presentation.hint
+        # The run itself succeeded — a hint that sent the reader back to rerun it would cost them.
+        assert "rerun" not in presentation.hint.lower()

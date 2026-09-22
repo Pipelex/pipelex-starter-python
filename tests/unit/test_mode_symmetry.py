@@ -1,0 +1,60 @@
+"""The drift guard for the full demo matrix.
+
+Every demo exists in every mode group, with the same arguments — that symmetry is
+the pedagogy (diff two mode files and only the lifecycle helper differs), and the
+duplication it implies is exactly what drifts. A demo added to one mode and
+forgotten in another fails here.
+"""
+
+import inspect
+
+import typer
+
+from widget.attended.cli import app as attended_app
+from widget.blocking.cli import app as blocking_app
+from widget.cli import app as root_app
+from widget.detached.cli import app as detached_app
+
+MODE_APPS = {"blocking": blocking_app, "attended": attended_app, "detached": detached_app}
+DEMO_COMMANDS = {"extract-entities", "summarize-pdf", "generate-image"}
+LIFECYCLE_COMMANDS = {"wait", "status", "result"}
+
+
+def _command_names(mode_app: typer.Typer) -> set[str]:
+    return {command.name for command in mode_app.registered_commands if command.name is not None}
+
+
+def _demo_signatures(mode_app: typer.Typer) -> dict[str, list[str]]:
+    signatures: dict[str, list[str]] = {}
+    for command in mode_app.registered_commands:
+        if command.name in DEMO_COMMANDS and command.callback is not None:
+            signatures[command.name] = list(inspect.signature(command.callback).parameters)
+    return signatures
+
+
+class TestModeSymmetry:
+    def test_every_mode_exposes_every_demo(self):
+        """Every demo is in every mode. A mode may hold more, and one mode alone holds the lifecycle.
+
+        The assertion is containment rather than equality because `make add-method` writes a
+        command into exactly one mode: a scaffolded command is a legitimate extra, and demanding
+        the three sets be equal would turn using the scaffolder into a test failure. What the
+        symmetry is actually about is unchanged — a demo present in one mode and missing from
+        another still fails here.
+        """
+        for mode_name, mode_app in MODE_APPS.items():
+            assert DEMO_COMMANDS <= _command_names(mode_app), mode_name
+        # Detached owns the run-lifecycle commands — nobody else has them.
+        assert LIFECYCLE_COMMANDS <= _command_names(detached_app)
+        assert not LIFECYCLE_COMMANDS & _command_names(blocking_app)
+        assert not LIFECYCLE_COMMANDS & _command_names(attended_app)
+
+    def test_the_demos_take_the_same_arguments_in_every_mode(self):
+        blocking_signatures = _demo_signatures(blocking_app)
+        assert set(blocking_signatures) == DEMO_COMMANDS
+        assert _demo_signatures(attended_app) == blocking_signatures
+        assert _demo_signatures(detached_app) == blocking_signatures
+
+    def test_the_root_app_mounts_the_modes_in_reading_order(self):
+        mounted = [group.name for group in root_app.registered_groups if group.name in MODE_APPS]
+        assert mounted == ["blocking", "attended", "detached"]

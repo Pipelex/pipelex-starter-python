@@ -1,0 +1,38 @@
+
+# env
+.env
+
+# venv
+.venv
+venv/
+
+# reports
+reports/
+
+# pycache
+__pycache__
+
+# Python build artifacts
+build/*
+*.egg-info/
+dist/
+*.pyc
+
+# mypy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# Results
+results/
+
+# Files the demos download from a run's produced artifacts
+downloads/
+
+temp/
+
+# Internal planning notes and campaign documents — never shipped to template
+# consumers (v0.11.0 already removed them once before open-sourcing). They live
+# in the workspace wip repository instead; anything left here stays local.
+/wip/

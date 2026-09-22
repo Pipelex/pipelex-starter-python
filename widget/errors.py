@@ -1,0 +1,169 @@
+"""Present SDK errors as actionable CLI messages.
+
+This module defines no exception classes — it is a presentation mapper. Each mode
+package's `_run()` wrapper (`widget/blocking/cli.py`, `widget/attended/cli.py`,
+`widget/detached/cli.py`) catches `PipelineRequestError` (the base of every error the
+`pipelex-sdk` client raises) exactly once, turns it into a `(message, hint)` pair here,
+and exits non-zero. Unexpected exceptions are deliberately NOT caught anywhere: they
+crash loudly with a full traceback.
+
+Error presentation is orthogonal to execution mode, so it is shared — but the hints
+name the mode *groups*, since the fix for a timed-out blocking run is to rerun it under
+another group.
+"""
+
+import json
+from typing import Any, NamedTuple, cast
+
+import httpx
+from mthds.protocol.exceptions import PipelineRequestError
+from pipelex_sdk.errors import (
+    ApiResponseError,
+    ApiUnreachableError,
+    ArtifactAuthenticationError,
+    ArtifactOperationError,
+    InputPreparationError,
+    InvalidLocalSourceError,
+    PipelineExecuteTimeoutError,
+    RejectedAssetError,
+    RunFailedError,
+    RunLifecycleUnavailableError,
+    RunTimeoutError,
+    UnsupportedUploadCapabilityError,
+    UploadAuthenticationError,
+)
+
+
+class ErrorPresentation(NamedTuple):
+    """What the CLI shows for a failed command: the error and what to do about it."""
+
+    message: str
+    hint: str | None
+
+
+def present_error(exc: PipelineRequestError | httpx.HTTPStatusError) -> ErrorPresentation:
+    """Map an SDK error to a CLI-facing message and an actionable hint.
+
+    The SDK's protocol routes (`execute`, `start`, `runs/*`) surface non-2xx
+    responses as raw `httpx.HTTPStatusError` (the inherited regime); the typed
+    `ApiResponseError` only rides the product routes. Both are mapped here so
+    an auth failure gets the API-key hint whichever route raised it.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        return _present_http_status_error(exc)
+    if isinstance(exc, PipelineExecuteTimeoutError):
+        return ErrorPresentation(
+            message=f"The blocking run exceeded the hosted gateway's ~30s synchronous cap ({exc.elapsed_seconds:.0f}s elapsed).",
+            hint="Rerun the same command with `widget attended ...` — the durable path survives long runs.",
+        )
+    if isinstance(exc, RunLifecycleUnavailableError):
+        return ErrorPresentation(
+            message=f"The server at {exc.api_url} has no run store (durable run lifecycle unavailable).",
+            hint="You are talking to a bare runner — use `widget blocking ...`.",
+        )
+    if isinstance(exc, ApiResponseError):
+        if exc.status in (401, 403):
+            return ErrorPresentation(
+                message=f"The API rejected the request ({exc.status} {exc.status_text}).",
+                hint="Set PIPELEX_API_KEY in your environment or .env file — get a key at https://app.pipelex.com",
+            )
+        return ErrorPresentation(
+            message=f"The API answered {exc.status} {exc.status_text}: {exc.server_message or exc}",
+            hint=None,
+        )
+    if isinstance(exc, ApiUnreachableError):
+        return ErrorPresentation(
+            message=f"Could not reach the Pipelex API at {exc.api_url}.",
+            hint="Check PIPELEX_BASE_URL — and if you self-host, make sure your runner is up.",
+        )
+    if isinstance(exc, RunFailedError):
+        return ErrorPresentation(
+            message=f"Run {exc.run_id} ended with status {exc.status}: {exc}",
+            hint=f"Inspect it with `widget detached status {exc.run_id}`.",
+        )
+    if isinstance(exc, RunTimeoutError):
+        return ErrorPresentation(
+            message=f"Gave up waiting for run {exc.run_id} after {exc.timeout_seconds:.0f}s — the run is still executing server-side.",
+            hint=f"Resume waiting with `widget detached wait {exc.run_id}`.",
+        )
+    # File upload (summarize-pdf) preparation errors — raised before any run is created.
+    if isinstance(exc, InputPreparationError):
+        return _present_upload_error(exc)
+    # Artifact download (generate-image) errors — raised after the run has already been paid for.
+    if isinstance(exc, ArtifactOperationError):
+        return _present_artifact_error(exc)
+    return ErrorPresentation(message=str(exc), hint=None)
+
+
+def _present_upload_error(exc: InputPreparationError) -> ErrorPresentation:
+    """Present a file-upload (input-preparation) failure. The SDK already gives each a clear
+    message; here we add the actionable hint per semantic category."""
+    if isinstance(exc, UnsupportedUploadCapabilityError):
+        hint = "File upload is a hosted capability — point PIPELEX_BASE_URL at https://api.pipelex.com (a bare runner may not serve /v1/upload)."
+    elif isinstance(exc, UploadAuthenticationError):
+        hint = "Set PIPELEX_API_KEY in your environment or .env file — get a key at https://app.pipelex.com"
+    elif isinstance(exc, RejectedAssetError):
+        hint = "The server rejected the file (usually past the service size cap) — try a smaller file."
+    elif isinstance(exc, InvalidLocalSourceError):
+        hint = "Check the path points at a readable file."
+    else:
+        hint = "Check PIPELEX_BASE_URL and that the API is reachable."
+    return ErrorPresentation(message=str(exc), hint=hint)
+
+
+def _present_artifact_error(exc: ArtifactOperationError) -> ErrorPresentation:
+    """Present a failure to bring a run's produced files down.
+
+    This family is raised by `widget/artifacts.py` *after* the run itself succeeded and its output
+    was printed, so no hint here ever says to rerun: the run has been paid for, and what is left
+    is to recover the files it produced.
+    """
+    if isinstance(exc, ArtifactAuthenticationError):
+        hint = "Set PIPELEX_API_KEY in your environment or .env file — get a key at https://app.pipelex.com"
+    else:
+        hint = "The run itself succeeded — check the download directory is writable and is not an existing file."
+    return ErrorPresentation(message=str(exc), hint=hint)
+
+
+def _present_http_status_error(exc: httpx.HTTPStatusError) -> ErrorPresentation:
+    """Present a raw protocol-route HTTP error, reading its RFC 7807 problem+json body.
+
+    The protocol routes (`execute`, `start`, `runs/*`) return errors as
+    `application/problem+json`: a human `detail`/`title` and a machine `error_type`.
+    httpx's own stringification throws all of that away (`Client error '400 Bad
+    Request' for url …` plus an MDN link), so we read the body and surface what the
+    server actually said — and branch on the structured `error_type`, never the
+    transport status, for the cases worth a hint.
+    """
+    status_code = exc.response.status_code
+    problem = _read_problem_json(exc.response)
+    if status_code in (401, 403):
+        return ErrorPresentation(
+            message=f"The API rejected the request ({status_code} {exc.response.reason_phrase}).",
+            hint="Set PIPELEX_API_KEY in your environment or .env file — get a key at https://app.pipelex.com",
+        )
+    # A durable-run endpoint (`/start`) this deployment can't serve: it runs a
+    # synchronous-only orchestration, so only `widget blocking` (`/execute`) works here.
+    if problem.get("error_type") == "StartRequiresAsyncOrchestration":
+        return ErrorPresentation(
+            message=problem.get("detail") or "This deployment cannot start durable runs — it has no async orchestration.",
+            hint="This runner only does synchronous runs — use `widget blocking ...` instead.",
+        )
+    detail = problem.get("detail") or problem.get("title")
+    if detail:
+        return ErrorPresentation(message=f"The API answered {status_code} {exc.response.reason_phrase}: {detail}", hint=None)
+    return ErrorPresentation(message=f"The API answered {status_code} {exc.response.reason_phrase}.", hint=None)
+
+
+def _read_problem_json(response: httpx.Response) -> dict[str, Any]:
+    """Best-effort parse of an RFC 7807 problem+json body; `{}` when it isn't JSON."""
+    try:
+        body: Any = response.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        # UnicodeDecodeError: `response.json()` is `json.loads(response.content)`,
+        # which raises it (not JSONDecodeError) on a non-UTF-8 body.
+        return {}
+    if isinstance(body, dict):
+        # JSON object keys are always strings.
+        return cast("dict[str, Any]", body)
+    return {}

@@ -1,0 +1,20 @@
+# Changelog
+
+## [Unreleased]
+
+## [v0.1.0] - 2026-09-22
+
+### Highlights
+
+**A Python starter for the hosted Pipelex API.** The starter runs MTHDS methods with `pipelex-sdk` and never installs the `pipelex` runtime: the `.mthds` bundle is read from disk and sent to the API, which runs the method and returns the output. Copy it with "Use this template", then run `/bootstrap` to make it yours.
+
+### Added
+
+- **Execution modes as command groups**: `widget blocking …` runs a method in one call and dies at the hosted cap, `widget attended …` starts a durable run and waits for it, and `widget detached …` starts one and collects it later with `status`, `result` or `wait`. Each mode is a self-contained file meant to be diffed against the others, and nothing about the run lifecycle is shared.
+- **The demos, in every mode**: `extract-entities` takes text, `summarize-pdf` uploads a file to hosted storage and sends its URI, and `generate-image` is the slow case that overruns the blocking cap on purpose. Every demo runs with zero arguments by falling back to a built-in sample.
+- **Generated typed clients**: `make codegen` projects each bundle's concepts into `widget/generated/<method>/models.py` through the hosted codegen route, and `make codegen-check` verifies the committed trees against their locks offline. The same check runs in the test suite, so a tree that drifted from its lock fails in CI.
+- **`make add-method`, for a method that lives elsewhere**: a catalog id or a published address becomes a `method.json` manifest, a generated tree and one Typer command in the mode you name, with parameters derived from the method's own input form and nothing method-shaped written by hand.
+- **Cost reports and produced files**: every result-producing command prints a per-call cost report to stderr and brings the files a run produced down to `downloads/`, with links minted fresh rather than read from the expiring result.
+- **Structured errors with hints**: an SDK or HTTP failure is mapped to a message and a hint naming the mode group to use, read from the API's RFC 7807 problem body rather than from a stringified exception.
+- **`/bootstrap`**: the Claude Code skill that turns a fresh copy of this template into a named project, renaming the `widget` placeholder everywhere it appears and refusing to hand back a half-renamed tree.
+- **`AGENTS.md`**: the damage-causing rules for any coding agent, beside `CLAUDE.md`.
