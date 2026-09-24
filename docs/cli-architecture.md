@@ -65,7 +65,7 @@ Three SDK capabilities show up in every result-producing path:
 - **Produced files.** A run that generates an image or a document does not return the bytes: the output carries a durable `pipelex-storage://` reference beside a signed `public_url` that expires, so the link must not be stored. `widget/artifacts.py` brings the files down through the SDK's artifact stack — `collect_artifacts` answers offline whether the output references any file at all, so a text result costs nothing, and `download_artifacts` mints a fresh link for each and saves it under `DEFAULT_DOWNLOAD_DIR`, never reading the embedded `public_url` and never overwriting a file. It answers a verdict with errors as values, so a file that did not come down is reported rather than raised. See `docs/artifact-download.md` in `pipelex-sdk`.
 - **File upload.** `summarize-pdf` feeds a *file* to a pipe. A hosted run cannot see your filesystem, so `inputs.py`'s `upload_document_input` uploads the file first (`client.upload_file`) and the run request carries only the returned `pipelex-storage://` URI — never the bytes. Preparation is a step of its own, before the run: an unreadable file or an upload-incapable deployment fails before any run is created, presented through the same `widget/errors.py` path as every other SDK error.
 
-## Two conventions worth copying
+## Conventions worth copying
 
 **stdout is the result; stderr is everything else.** Progress spinners, run ids in attended mode, error messages, and hints all go to stderr, so stdout stays pipeable. In detached mode the run id *is* the result, so it goes to stdout bare (`print`, not Rich) — `RUN_ID=$(widget detached generate-image "…")` just works.
 
@@ -76,6 +76,8 @@ The protocol routes (`execute`/`start`/`runs/*`) surface a non-2xx as a raw `htt
 The hints name the mode *groups*, because the fix for a failed run is usually another group: a blocking run that hit the ~30s cap tells you to rerun it with `widget attended`; a run that timed out while you waited tells you to resume it with `widget detached wait <id>`; a durable run against a runner that can't do them tells you to use `widget blocking`.
 
 **Every demo runs with zero arguments.** When you give neither an argument nor `--file`, the input helper returns a bundled sample (`widget/inputs.py`'s `SAMPLE_*` constants), and the command prints a one-line notice on stderr saying so. A fresh clone shows a working result on its very first command once your API key is set; stdout stays the clean, pipeable result because the notice is on stderr. Sample data is orthogonal to execution, so like input encoding it is shared, not duplicated per mode.
+
+**A demo names its pipe by its qualified reference.** Each call sends `pipe_code="<domain>.<pipe_code>"` — `extract_entities.extract_entities`, the bundle's own `domain` and its `main_pipe` — never the bare code. The runtime keys a pipe by exactly that reference, while a bare code is searched for across every domain of the bundle and fails as ambiguous once two domains declare the same one, which a bundle you grow from a demo can easily come to do. The qualified form ties the call site to the bundle's `domain`, so rename the two together; `tests/unit/test_mode_symmetry.py` reads the reference from each bundle and fails when a call site no longer matches it.
 
 ## Why `attended` and `detached`, not `durable`
 

@@ -61,7 +61,7 @@ You get the extracted entities as JSON:
 
 ## Try the demos
 
-Each demo is one self-contained `widget` command — a bundle path, a pipe code, and a typed narrowing of the result into its *generated* model. Every demo exists in every execution mode; the commands below use `blocking`, the simplest one.
+Each demo is one self-contained `widget` command — a bundle path, the pipe's qualified reference (`domain.pipe_code`), and a typed narrowing of the result into its *generated* model. Every demo exists in every execution mode; the commands below use `blocking`, the simplest one.
 
 **Every demo runs with no arguments.** Give it nothing and it uses a bundled sample (and tells you so on stderr), so you can see a working result before you have any input of your own — then pass your own text, prompt, or file to replace it:
 

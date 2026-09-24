@@ -41,7 +41,7 @@ class TestAttendedCli:
         assert result.exit_code == 0
         attended_mock.assert_awaited_once()
         assert attended_mock.await_args is not None
-        assert attended_mock.await_args.kwargs["pipe_code"] == "extract_entities"
+        assert attended_mock.await_args.kwargs["pipe_code"] == "extract_entities.extract_entities"
         assert attended_mock.await_args.kwargs["inputs"] == {"text": "some text"}
         assert "Marie Curie" in result.output
 

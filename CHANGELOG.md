@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The demos name their pipe by its qualified reference**: every demo command, in every mode, sends `pipe_code` as `domain.pipe_code` (`extract_entities.extract_entities`) rather than the bare code, the exact key the runtime resolves. A bare code is searched for across every domain of the bundle and fails as ambiguous once two domains declare it, so code copied from a demo keeps working as its bundle grows; rename a bundle's `domain` and its call sites together.
+
 ## [v0.1.0] - 2026-09-22
 
 ### Highlights

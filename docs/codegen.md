@@ -11,7 +11,7 @@ The typed models this starter parses run results into are **generated from the `
 
 Each `models.py` starts with a `pipelex-codegen-stamp` header recording the source crate fingerprint, engine version, projection, and a content hash. The sibling `codegen.lock` records the generated artifact set. Together they make drift detectable offline.
 
-The demo commands in each mode CLI (`widget/blocking/cli.py`, `widget/attended/cli.py`) import the generated models and only add the bundle path, the pipe code, and the narrowing line (`Model.model_validate(main_stuff)`) — nothing method-shaped is hand-written.
+The demo commands in each mode CLI (`widget/blocking/cli.py`, `widget/attended/cli.py`) import the generated models and only add the bundle path, the pipe's qualified reference, and the narrowing line (`Model.model_validate(main_stuff)`) — nothing method-shaped is hand-written.
 
 ## Workflow
 

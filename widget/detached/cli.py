@@ -126,7 +126,7 @@ def extract_entities(
     if resolved.is_sample:
         progress_console.print(f"[dim]No text given — using the sample: {resolved.text!r}. Pass your own as an argument or via --file.[/dim]")
     bundle = (METHODS_DIR / "extract-entities" / "main.mthds").read_text()
-    run_id = _run(start_pipe(pipe_code="extract_entities", mthds_contents=[bundle], inputs={"text": resolved.text}))
+    run_id = _run(start_pipe(pipe_code="extract_entities.extract_entities", mthds_contents=[bundle], inputs={"text": resolved.text}))
     _print_run_id(run_id)
 
 
@@ -144,7 +144,7 @@ def summarize_pdf(
     bundle = (METHODS_DIR / "summarize-pdf" / "main.mthds").read_text()
     # Upload the file first (a separate step from the run) — the run request carries only its URI.
     inputs = {"document": _run(upload_document_input(document))}
-    run_id = _run(start_pipe(pipe_code="summarize_pdf", mthds_contents=[bundle], inputs=inputs))
+    run_id = _run(start_pipe(pipe_code="summarize_pdf.summarize_pdf", mthds_contents=[bundle], inputs=inputs))
     _print_run_id(run_id)
 
 
@@ -162,7 +162,7 @@ def generate_image(
     if resolved.is_sample:
         progress_console.print(f"[dim]No prompt given — using the sample: {resolved.text!r}. Pass your own as an argument or via --file.[/dim]")
     bundle = (METHODS_DIR / "generate-image" / "main.mthds").read_text()
-    run_id = _run(start_pipe(pipe_code="generate_image", mthds_contents=[bundle], inputs={"image_prompt": resolved.text}))
+    run_id = _run(start_pipe(pipe_code="generate_image.generate_image", mthds_contents=[bundle], inputs={"image_prompt": resolved.text}))
     _print_run_id(run_id)
 
 
