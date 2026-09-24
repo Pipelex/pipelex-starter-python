@@ -41,7 +41,7 @@ class TestDetachedCli:
         assert result.exit_code == 0
         start_mock.assert_awaited_once()
         assert start_mock.await_args is not None
-        assert start_mock.await_args.kwargs["pipe_code"] == "extract_entities"
+        assert start_mock.await_args.kwargs["pipe_code"] == "extract_entities.extract_entities"
         assert start_mock.await_args.kwargs["inputs"] == {"text": "some text"}
         # The bare id on stdout is the contract: RUN_ID=$(widget detached extract-entities "…")
         assert result.stdout.strip() == RUN_ID
@@ -128,13 +128,16 @@ class TestDetachedCli:
         assert stub_download in result.output
 
     def test_status_reports_the_run_status(self, mocker: MockerFixture):
-        run = RunRead(pipeline_run_id=RUN_ID, pipe_code="extract_entities", status=RunStatus.RUNNING, created_at="2026-07-13T10:00:00Z")
+        # The platform records the pipe_code the run was started with, which the demos send qualified.
+        run = RunRead(
+            pipeline_run_id=RUN_ID, pipe_code="extract_entities.extract_entities", status=RunStatus.RUNNING, created_at="2026-07-13T10:00:00Z"
+        )
         mocker.patch("widget.detached.cli.fetch_run_status", return_value=run)
         result = runner.invoke(app, ["detached", "status", RUN_ID])
         assert result.exit_code == 0
         assert RUN_ID in result.output
         assert "RUNNING" in result.output
-        assert "extract_entities" in result.output
+        assert "extract_entities.extract_entities" in result.output
 
     def test_status_flags_a_degraded_reading(self, mocker: MockerFixture):
         run = RunRead(pipeline_run_id=RUN_ID, status=RunStatus.RUNNING, created_at="2026-07-13T10:00:00Z", degraded=True)

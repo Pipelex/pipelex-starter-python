@@ -41,7 +41,7 @@ class TestBlockingCli:
         assert result.exit_code == 0
         execute_mock.assert_awaited_once()
         assert execute_mock.await_args is not None
-        assert execute_mock.await_args.kwargs["pipe_code"] == "extract_entities"
+        assert execute_mock.await_args.kwargs["pipe_code"] == "extract_entities.extract_entities"
         assert execute_mock.await_args.kwargs["inputs"] == {"text": "some text"}
         assert "Marie Curie" in result.output
 
