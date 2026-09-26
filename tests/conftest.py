@@ -46,7 +46,7 @@ def stub_download(mocker: MockerFixture) -> str:
     which is the shape the hosted runtime really returns for an image — must take this fixture or
     it will reach for the network. Returns the path the stub pretends it wrote, for assertions.
     """
-    artifact = DownloadedArtifact(uri=STUB_ARTIFACT_URI, path=STUB_ARTIFACT_PATH, content_type="image/png", size=3)
+    artifact = DownloadedArtifact(uri=STUB_ARTIFACT_URI, found_at=["$.url"], path=STUB_ARTIFACT_PATH, content_type="image/png", size=3)
     result = DownloadArtifactsResult(scope=ArtifactScope.MAIN_STUFF, artifacts=[artifact], saved_paths=[STUB_ARTIFACT_PATH], all_saved=True)
     fake_client = mocker.AsyncMock()
     fake_client.download_artifacts.return_value = result

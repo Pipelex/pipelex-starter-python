@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from pipelex_sdk.runs import RunResults
+from pipelex_sdk.error_models import RunErrorReport, UserAction
+from pipelex_sdk.errors import RunFailedError
+from pipelex_sdk.runs import RunResults, RunStatus
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
@@ -110,3 +112,22 @@ class TestAttendedCli:
         assert stub_download in result.output
         assert attended_mock.await_args is not None
         assert attended_mock.await_args.kwargs["inputs"] == {"image_prompt": "a cat wearing a hat"}
+
+    def test_a_failed_run_prints_the_reason_the_next_step_and_the_retry_advice(self, mocker: MockerFixture):
+        report = RunErrorReport(
+            title="LLM completion",
+            message="The model refused the request.",
+            retryable=False,
+            user_action=UserAction(kind="change_input", detail="Rephrase the prompt, or pick another model."),
+        )
+        error = RunFailedError(
+            "Run finished with status FAILED: The model refused the request.", run_id="run-1", status=RunStatus.FAILED, error=report
+        )
+        mocker.patch("widget.attended.cli.start_and_wait", side_effect=error)
+        result = runner.invoke(app, ["attended", "extract-entities", "some text"])
+        assert result.exit_code == 1
+        output = " ".join(result.output.split())
+        assert "Run run-1 failed." in output
+        assert "Reason: LLM completion — The model refused the request." in output
+        assert "Next step: Rephrase the prompt, or pick another model." in output
+        assert "Retry: running it again will fail the same way until the cause is fixed." in output

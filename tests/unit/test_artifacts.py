@@ -61,7 +61,9 @@ class TestDownloadProducedFiles:
         client.assert_not_called()
 
     async def test_an_output_referencing_a_file_goes_through_the_client(self, mocker: MockerFixture, tmp_path: Path):
-        artifact = DownloadedArtifact(uri="pipelex-storage://run-1/cat.png", path=str(tmp_path / "cat.png"), content_type="image/png", size=3)
+        artifact = DownloadedArtifact(
+            uri="pipelex-storage://run-1/cat.png", found_at=["$.url"], path=str(tmp_path / "cat.png"), content_type="image/png", size=3
+        )
         fake_client = mocker.AsyncMock()
         fake_client.download_artifacts.return_value = _verdict(artifact)
         async_cm = mocker.MagicMock()
@@ -84,11 +86,13 @@ class TestPrintDownloads:
         assert _render(None) == ""
 
     def test_names_each_saved_file(self):
-        rendered = _render(_verdict(DownloadedArtifact(uri="pipelex-storage://run-1/cat.png", path="/tmp/out/cat.png", size=3)))
+        rendered = _render(_verdict(DownloadedArtifact(uri="pipelex-storage://run-1/cat.png", found_at=["$.url"], path="/tmp/out/cat.png", size=3)))
         assert "/tmp/out/cat.png" in rendered
 
     def test_names_a_reference_that_did_not_come_down(self):
-        failed = DownloadedArtifact(uri="pipelex-storage://run-1/cat.png", error=ArtifactItemError(code="forbidden", detail="Not your run."))
+        failed = DownloadedArtifact(
+            uri="pipelex-storage://run-1/cat.png", found_at=["$.url"], error=ArtifactItemError(code="forbidden", detail="Not your run.")
+        )
         rendered = _render(_verdict(failed))
         # The reference, the machine code and the sentence a person reads — a failed reference is
         # reported rather than raised, so the message is the only place it surfaces.
@@ -97,8 +101,10 @@ class TestPrintDownloads:
         assert "Not your run." in rendered
 
     def test_reports_both_arms_of_a_partial_download(self):
-        saved = DownloadedArtifact(uri="pipelex-storage://run-1/ok.png", path="/tmp/out/ok.png", size=3)
-        failed = DownloadedArtifact(uri="pipelex-storage://run-1/bad.png", error=ArtifactItemError(code="write_failed", detail="Disk full."))
+        saved = DownloadedArtifact(uri="pipelex-storage://run-1/ok.png", found_at=["$[0].url"], path="/tmp/out/ok.png", size=3)
+        failed = DownloadedArtifact(
+            uri="pipelex-storage://run-1/bad.png", found_at=["$[1].url"], error=ArtifactItemError(code="write_failed", detail="Disk full.")
+        )
         rendered = _render(_verdict(saved, failed))
         assert "/tmp/out/ok.png" in rendered
         assert "Disk full." in rendered

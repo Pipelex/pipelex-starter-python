@@ -6,7 +6,7 @@ run's state lives behind that id, so you pick it back up whenever you like — e
 from another terminal, another machine, another day:
 
 - `widget detached wait <id>`   — poll it to completion and print its result.
-- `widget detached status <id>` — where is it right now, without waiting.
+- `widget detached status <id>` — where is it right now, without waiting, and why it failed if it did.
 - `widget detached result <id>` — its result if it is done, without waiting.
 
 Same durable run as `widget attended`; the only difference is who waits.
@@ -37,11 +37,12 @@ from pipelex_sdk.runs import (
     WaitForResultOptions,
 )
 from rich.console import Console
+from rich.markup import escape
 
 # add-method:imports — `make add-method` inserts a scaffolded method's generated-model import
 # into the block below, in sorted position. Keep the token; the prose after it is free.
 from widget.artifacts import DEFAULT_DOWNLOAD_DIR, download_produced_files, print_downloads
-from widget.errors import present_error
+from widget.errors import present_error, present_failed_run, print_error
 from widget.inputs import SAMPLE_ENTITIES_TEXT, SAMPLE_IMAGE_PROMPT, SAMPLE_INVOICE, read_text_input, upload_document_input
 from widget.usage import print_cost_report
 
@@ -177,12 +178,20 @@ def wait(
 
 @app.command(name="status")
 def status(run_id: Annotated[str, typer.Argument(help="The pipeline run id printed when the run started.")]) -> None:
-    """Show a run's coarse status without waiting."""
+    """Show a run's coarse status without waiting — and, for a run that ended without a result, why."""
     run = _run(fetch_run_status(run_id))
     pipe_part = f" (pipe: {run.pipe_code})" if run.pipe_code else ""
-    output_console.print(f"{run.pipeline_run_id}: [bold]{run.status}[/bold]{pipe_part}")
+    output_console.print(f"{run.pipeline_run_id}: [bold]{run.status}[/bold]{escape(pipe_part)}")
     if run.degraded:
         output_console.print("[yellow]Status is degraded — last-known value, the status backend was unreachable; retry shortly.[/yellow]")
+    if run.status.is_terminal and not run.status.is_success:
+        # The status read carries the run's stored error report, read out as a failed `wait` reads it.
+        # The reason is part of the answer (stdout); the hint, for a run that recorded none, is chatter (stderr).
+        failure = present_failed_run(run_id=run.pipeline_run_id, status=run.status, report=run.error, platform_message=None)
+        for line in failure.details or ("No reason was recorded for this run.",):
+            output_console.print(escape(line))
+        if failure.hint:
+            progress_console.print(f"[yellow]Hint:[/yellow] {escape(failure.hint)}")
 
 
 @app.command(name="result")
@@ -201,7 +210,11 @@ def result(
         case RunResultCompleted():
             _print_results(state.result)
         case RunResultFailed():
-            progress_console.print(f"[red]Run {state.pipeline_run_id} ended with status {state.status}: {state.message}[/red]")
+            # The failed arm carries what `RunFailedError` carries, so it reads exactly as a failed `wait` does.
+            print_error(
+                progress_console,
+                present_failed_run(run_id=state.pipeline_run_id, status=state.status, report=state.error, platform_message=state.message),
+            )
             raise typer.Exit(1)
 
 
@@ -237,10 +250,7 @@ def _run(coro: Coroutine[Any, Any, ResultT]) -> ResultT:
     try:
         return asyncio.run(coro)
     except (PipelineRequestError, httpx.HTTPStatusError) as exc:
-        presentation = present_error(exc)
-        progress_console.print(f"[red]Error:[/red] {presentation.message}")
-        if presentation.hint:
-            progress_console.print(f"\n[yellow]Hint:[/yellow] {presentation.hint}")
+        print_error(progress_console, present_error(exc))
         raise typer.Exit(1) from exc
     except KeyboardInterrupt as exc:
         # The resume hint was already printed by `attend_run`; the run keeps executing server-side.
