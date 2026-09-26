@@ -259,3 +259,6 @@ select = [
   "E501",
   "I",
 ]
+
+[tool.uv.sources]
+pipelex-sdk = { git = "https://github.com/Pipelex/pipelex-sdk-python.git", rev = "ffcb5c6e6cefa9f5f63b9de80c87d13c64735932" }
