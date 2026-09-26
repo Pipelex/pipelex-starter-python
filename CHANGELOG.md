@@ -6,6 +6,11 @@
 
 - **The demos name their pipe by its qualified reference**: every demo command, in every mode, sends `pipe_code` as `domain.pipe_code` (`extract_entities.extract_entities`) rather than the bare code, the exact key the runtime resolves. A bare code is searched for across every domain of the bundle and fails as ambiguous once two domains declare it, so code copied from a demo keeps working as its bundle grows; rename a bundle's `domain` and its call sites together.
 
+### Fixed
+
+- **A failed run says why**: a durable run that ended without a result, whether met by `widget attended …`, `widget detached wait` or `widget detached result`, now prints the reason the runner stored for it (its title and message), the next step it advises and whether running it again can succeed, instead of repeating its status; `widget detached status` prints the same lines under the status. A run that ended with no stored report, such as a cancelled one, says that no reason was recorded, keeps the platform's own sentence and says what is left to do.
+- **Server text in an error is printed as it came**: a bracketed span in an error message or a stored report, such as a provider's `[/x]`, is no longer read as Rich markup, so it neither disappears nor crashes the print.
+
 ## [v0.1.0] - 2026-09-22
 
 ### Highlights
