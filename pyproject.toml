@@ -1,6 +1,6 @@
 [project]
 name = "widget"
-version = "0.1.0"
+version = "0.1.1"
 description = "Replace this with your project description"
 # authors = [{ name = "Your Name", email = "your.email@example.com" }]
 license = "MIT"
@@ -24,8 +24,8 @@ classifiers = [
 # pin always satisfies it, so bumping the SDK never has to be matched here.
 dependencies = [
   "httpx>=0.27.0",
-  "mthds>=0.14.0",
-  "pipelex-sdk>=0.10.2",
+  "mthds>=0.16.0",
+  "pipelex-sdk>=0.13.0",
   "python-dotenv>=1.0.0",
   "rich>=13.0.0",
   "typer>=0.15.0",

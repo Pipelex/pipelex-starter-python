@@ -91,7 +91,7 @@ A published package can carry several pipes, so the pipe is chosen by a rule tha
 3. The only pipe, when the method declares exactly one.
 4. Otherwise a refusal listing the pipes and asking for `PIPE`.
 
-The command sends the chosen ref **qualified** (`pipe_code="stats.analyze_text"`) beside the selector. A bare code would be ambiguous in exactly the case step 1 refuses to guess at — a code two domains of the method both declare — and the runtime resolves a `domain.pipe_code` directly, so the qualified ref is right on every path. The demo commands send bare codes because their bundles have one domain each.
+The command sends the chosen ref **qualified** (`pipe_code="stats.analyze_text"`) beside the selector. A bare code would be ambiguous in exactly the case step 1 refuses to guess at — a code two domains of the method both declare — and the runtime resolves a `domain.pipe_code` directly, so the qualified ref is right on every path. The demo commands send qualified refs too, for the same reason.
 
 ## The command's parameters are the method's inputs
 
