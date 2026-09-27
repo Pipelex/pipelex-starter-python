@@ -1,11 +1,11 @@
 import io
-from collections.abc import Mapping
 
-import httpx
 import pytest
+from mthds.runners.api.problem import UserAction as ProblemUserAction
 from pipelex_sdk.artifact_models import ArtifactScope, DownloadArtifactsResult
 from pipelex_sdk.error_models import RunErrorReport, UserAction
 from pipelex_sdk.errors import (
+    ApiResponseError,
     ApiUnreachableError,
     ArtifactAuthenticationError,
     ArtifactOperationError,
@@ -19,9 +19,10 @@ from pipelex_sdk.errors import (
     UploadAuthenticationError,
 )
 from pipelex_sdk.runs import RunStatus
+from pipelex_sdk.validation_models import ValidationErrorCategory, ValidationErrorItem
 from rich.console import Console
 
-from widget.errors import ErrorPresentation, present_error, print_error, report_lines
+from widget.errors import ErrorPresentation, present_error, print_error, problem_lines, report_lines
 
 # A failed run's stored report as the runner writes it for an inference failure, and the platform's
 # sentence about the run with and without one (`Run finished with status <STATUS>: <message>`).
@@ -37,10 +38,37 @@ REPORTED_DETAIL = "Run finished with status FAILED: The model refused the reques
 UNREPORTED_DETAIL = "Run finished with status FAILED; no result available"
 
 
-def _http_status_error(status_code: int, *, problem: Mapping[str, object] | None = None) -> httpx.HTTPStatusError:
-    request = httpx.Request("POST", "https://api.pipelex.com/v1/start")
-    response = httpx.Response(status_code, request=request, json=problem) if problem is not None else httpx.Response(status_code, request=request)
-    return httpx.HTTPStatusError("boom", request=request, response=response)
+def _api_response_error(
+    status: int,
+    status_text: str,
+    *,
+    title: str | None = None,
+    detail: str | None = None,
+    error_type: str | None = None,
+    code: str | None = None,
+    user_action: ProblemUserAction | None = None,
+    retryable: bool | None = None,
+    validation_errors: list[ValidationErrorItem] | None = None,
+) -> ApiResponseError:
+    """A non-2xx answer as the SDK raises it, carrying only the problem members a test names."""
+    return ApiResponseError(
+        f"API POST /v1/start failed ({status}): {detail or title or status_text}",
+        api_url="https://api.pipelex.com",
+        status=status,
+        status_text=status_text,
+        response_body="",
+        title=title,
+        server_message=detail,
+        error_type=error_type,
+        code=code,
+        user_action=user_action,
+        retryable=retryable,
+        validation_errors=validation_errors,
+    )
+
+
+def _item(message: str, *, pipe_code: str | None = None, concept_code: str | None = None) -> ValidationErrorItem:
+    return ValidationErrorItem(category=ValidationErrorCategory.PIPE_VALIDATION, message=message, pipe_code=pipe_code, concept_code=concept_code)
 
 
 class TestPresentError:
@@ -56,46 +84,50 @@ class TestPresentError:
         assert presentation.hint is not None
         assert "widget blocking" in presentation.hint
 
-    def test_http_auth_error_hints_api_key(self):
-        # The protocol routes (execute/start/runs) raise raw httpx.HTTPStatusError,
-        # not ApiResponseError — an auth failure must still get the key hint.
-        for status_code in (401, 403):
-            presentation = present_error(_http_status_error(status_code))
-            assert str(status_code) in presentation.message
+    def test_a_refused_start_reads_out_the_reason_the_pipe_the_next_step_and_the_retry_advice(self, refused_start: ApiResponseError):
+        # The protocol routes raise the typed error since pipelex-sdk 0.14.0, so a method the plane
+        # will not run says why, where and what to do — not only the transport status.
+        presentation = present_error(refused_start)
+        assert presentation.message == "The API answered 422 Unprocessable Entity."
+        assert presentation.details == (
+            "Reason: Validate bundle — Pipe 'draft_pitch' (PipeLLM), field 'model': Model handle 'gpt-5.1' was not found in the model deck"
+            "\n\nDid you mean: gpt-5.5, gpt-5.4, gpt-5.6-sol, gpt-5.4-pro, gpt-5.6-luna",
+            # The item's message is the reason's detail verbatim, so only where it is is added.
+            "Pipe: draft_pitch",
+            "Next step: Edit the bundle as each validation error says: apply its suggested fix where it has one, after confirming an unsafe one",
+            "Retry: running it again will fail the same way until the cause is fixed.",
+        )
+        # The next step is the advice, so no hint competes with it.
+        assert presentation.hint is None
+
+    def test_an_auth_refusal_hints_api_key_and_keeps_the_reason(self):
+        # A 403 can be a key that was recognised but may not use the route, so the reason is read out beside the hint.
+        for status, status_text in ((401, "Unauthorized"), (403, "Forbidden")):
+            presentation = present_error(_api_response_error(status, status_text, detail="This key may not use the route."))
+            assert presentation.message == f"The API rejected the request ({status} {status_text})."
+            assert presentation.details == ("Reason: This key may not use the route.",)
             assert presentation.hint is not None
             assert "PIPELEX_API_KEY" in presentation.hint
 
-    def test_http_server_error_has_no_hint(self):
-        presentation = present_error(_http_status_error(500))
+    def test_a_server_error_has_no_hint(self):
+        presentation = present_error(_api_response_error(500, "Internal Server Error", title="Internal error"))
+        assert presentation.details == ("Reason: Internal error",)
         assert presentation.hint is None
 
     def test_start_without_async_orchestration_hints_blocking(self):
-        # A synchronous-only runner rejects /start with this RFC 7807 error_type;
-        # the fix is to run the same demo under `widget blocking`.
-        problem = {
-            "error_type": "StartRequiresAsyncOrchestration",
-            "detail": "Orchestration mode 'direct' cannot honor fire-and-forget delivery. Use /execute instead.",
-            "status": 400,
-        }
-        presentation = present_error(_http_status_error(400, problem=problem))
-        assert "Orchestration mode 'direct'" in presentation.message
+        # A synchronous-only runner refuses /start with this error_type; the fix is to run the same
+        # demo under `widget blocking`, which the server cannot know to say.
+        detail = "Orchestration mode 'direct' cannot honor fire-and-forget delivery. Use /execute instead."
+        presentation = present_error(_api_response_error(400, "Bad Request", detail=detail, error_type="StartRequiresAsyncOrchestration"))
+        assert presentation.message == detail
         assert presentation.hint is not None
         assert "widget blocking" in presentation.hint
 
-    def test_http_error_with_undecodable_body_falls_back_to_status(self):
-        # A non-UTF-8 body makes `response.json()` raise UnicodeDecodeError (not
-        # JSONDecodeError); the best-effort problem+json parse must still fall
-        # back to the status-only message instead of crashing mid-presentation.
-        request = httpx.Request("POST", "https://api.pipelex.com/v1/start")
-        response = httpx.Response(400, request=request, headers={"content-type": "application/problem+json"}, content=b"\xffnot-json")
-        presentation = present_error(httpx.HTTPStatusError("boom", request=request, response=response))
-        assert presentation.message == "The API answered 400 Bad Request."
-        assert presentation.hint is None
-
-    def test_http_error_surfaces_the_problem_detail(self):
-        problem = {"title": "Bad input", "detail": "Missing required input 'text'.", "status": 400}
-        presentation = present_error(_http_status_error(400, problem=problem))
-        assert "Missing required input 'text'." in presentation.message
+    def test_an_answer_without_a_problem_document_names_the_status(self):
+        # A body that was not a problem document — a proxy's page, say — leaves every member `None`.
+        presentation = present_error(_api_response_error(502, "Bad Gateway"))
+        assert presentation.message == "The API answered 502 Bad Gateway."
+        assert presentation.details == ()
         assert presentation.hint is None
 
     def test_unreachable_hints_base_url(self):
@@ -209,6 +241,68 @@ class TestPresentError:
     def test_report_lines_read_out_what_the_report_carries(self, report: RunErrorReport | None, expected_lines: tuple[str, ...]):
         assert report_lines(report) == expected_lines
 
+    @pytest.mark.parametrize(
+        ("exc", "expected_lines"),
+        [
+            pytest.param(
+                _api_response_error(400, "Bad Request", title="Bad input", detail="Missing required input 'text'."),
+                ("Reason: Bad input — Missing required input 'text'.",),
+                id="title and detail",
+            ),
+            pytest.param(
+                _api_response_error(404, "Not Found", error_type="PackageNotFoundError"), ("Reason: PackageNotFoundError",), id="runner class"
+            ),
+            pytest.param(_api_response_error(409, "Conflict", code="conflict"), ("Reason: conflict",), id="platform code"),
+            pytest.param(
+                _api_response_error(
+                    422,
+                    "Unprocessable Entity",
+                    title="Validate bundle",
+                    detail="The method is invalid.",
+                    validation_errors=[
+                        _item("Model handle 'gpt-5.1' was not found.", pipe_code="draft_pitch"),
+                        _item("Field 'ideas' is not a list.", concept_code="TopicReview"),
+                        _item("The bundle declares no domain."),
+                    ],
+                ),
+                (
+                    "Reason: Validate bundle — The method is invalid.",
+                    "In pipe draft_pitch: Model handle 'gpt-5.1' was not found.",
+                    "In concept TopicReview: Field 'ideas' is not a list.",
+                    "Problem: The bundle declares no domain.",
+                ),
+                id="items saying more than the reason",
+            ),
+            pytest.param(
+                _api_response_error(
+                    422,
+                    "Unprocessable Entity",
+                    validation_errors=[_item("Model handle 'gpt-5.1' was not found.", pipe_code="draft_pitch")],
+                    user_action=ProblemUserAction(kind="change_input", detail="Fix the bundle."),
+                ),
+                ("In pipe draft_pitch: Model handle 'gpt-5.1' was not found.", "Next step: Fix the bundle."),
+                id="items without a reason",
+            ),
+            pytest.param(
+                _api_response_error(
+                    422,
+                    "Unprocessable Entity",
+                    detail="First. Second.",
+                    validation_errors=[_item("First.", pipe_code="a"), _item("Second.", concept_code="B"), _item("Second.")],
+                ),
+                ("Reason: First. Second.", "Pipe: a", "Concept: B"),
+                id="items the reason already says",
+            ),
+            pytest.param(
+                _api_response_error(429, "Too Many Requests", detail="Slow down.", retryable=True),
+                ("Reason: Slow down.", "Retry: running it again may succeed."),
+                id="retryable",
+            ),
+        ],
+    )
+    def test_problem_lines_read_out_what_the_problem_carries(self, exc: ApiResponseError, expected_lines: tuple[str, ...]):
+        assert problem_lines(exc) == expected_lines
+
     def test_print_error_prints_the_message_the_details_and_the_hint(self):
         buffer = io.StringIO()
         print_error(Console(file=buffer, width=200), ErrorPresentation(message="Run run-9 failed.", hint="Do this.", details=("Reason: it broke.",)))
@@ -216,6 +310,16 @@ class TestPresentError:
         assert "Error: Run run-9 failed." in rendered
         assert "Reason: it broke." in rendered
         assert "Hint: Do this." in rendered
+
+    def test_print_error_hangs_a_multi_line_detail_under_its_label(self):
+        # A refused method's reason ends with a blank line and the model names it suggests instead; at
+        # the margin, that suggestion would read as a line of its own.
+        buffer = io.StringIO()
+        print_error(
+            Console(file=buffer, width=200),
+            ErrorPresentation(message="Refused.", hint=None, details=("Reason: Unknown model.\n\nDid you mean: gpt-5?",)),
+        )
+        assert buffer.getvalue() == "Error: Refused.\n  Reason: Unknown model.\n\n    Did you mean: gpt-5?\n"
 
     def test_print_error_prints_server_text_verbatim_rather_than_as_markup(self):
         # A report's message is the runner's text, provider wording included: a bracketed span in it

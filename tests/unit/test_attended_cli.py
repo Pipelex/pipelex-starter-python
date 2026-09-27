@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from pipelex_sdk.error_models import RunErrorReport, UserAction
-from pipelex_sdk.errors import RunFailedError
+from pipelex_sdk.errors import ApiResponseError, RunFailedError
 from pipelex_sdk.runs import RunResults, RunStatus
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
@@ -131,3 +131,13 @@ class TestAttendedCli:
         assert "Reason: LLM completion — The model refused the request." in output
         assert "Next step: Rephrase the prompt, or pick another model." in output
         assert "Retry: running it again will fail the same way until the cause is fixed." in output
+
+    def test_a_refused_start_prints_the_reason_the_pipe_and_the_next_step(self, mocker: MockerFixture, refused_start: ApiResponseError):
+        mocker.patch("widget.attended.cli.start_and_wait", side_effect=refused_start)
+        result = runner.invoke(app, ["attended", "extract-entities", "some text"])
+        assert result.exit_code == 1
+        output = " ".join(result.output.split())
+        assert "The API answered 422 Unprocessable Entity." in output
+        assert "Reason: Validate bundle — Pipe 'draft_pitch' (PipeLLM), field 'model': Model handle 'gpt-5.1' was not found" in output
+        assert "Pipe: draft_pitch" in output
+        assert "Next step: Edit the bundle as each validation error says" in output

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pipelex_sdk.errors import ApiResponseError
 from pipelex_sdk.runs import RunResults
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
@@ -110,3 +111,13 @@ class TestBlockingCli:
         assert stub_download in result.output
         assert execute_mock.await_args is not None
         assert execute_mock.await_args.kwargs["inputs"] == {"image_prompt": "a cat wearing a hat"}
+
+    def test_a_refused_execute_prints_the_reason_the_pipe_and_the_next_step(self, mocker: MockerFixture, refused_start: ApiResponseError):
+        mocker.patch("widget.blocking.cli.execute_pipe", side_effect=refused_start)
+        result = runner.invoke(app, ["blocking", "extract-entities", "some text"])
+        assert result.exit_code == 1
+        output = " ".join(result.output.split())
+        assert "The API answered 422 Unprocessable Entity." in output
+        assert "Reason: Validate bundle — Pipe 'draft_pitch' (PipeLLM), field 'model': Model handle 'gpt-5.1' was not found" in output
+        assert "Pipe: draft_pitch" in output
+        assert "Next step: Edit the bundle as each validation error says" in output

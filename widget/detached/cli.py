@@ -22,7 +22,6 @@ import asyncio
 from pathlib import Path
 from typing import Annotated, Any, Coroutine, TypeVar
 
-import httpx
 import typer
 from mthds.protocol.exceptions import PipelineRequestError
 from pipelex_sdk.client import PipelexAPIClient
@@ -243,13 +242,13 @@ def _print_results(results: RunResults) -> None:
 def _run(coro: Coroutine[Any, Any, ResultT]) -> ResultT:
     """Await the lifecycle, presenting SDK errors and Ctrl-C as clean exits.
 
-    Every error the SDK client raises descends from `PipelineRequestError`, except the
-    raw `httpx.HTTPStatusError` its protocol routes surface. Nothing else is caught:
-    an unexpected exception crashes loudly with its traceback.
+    Every error the SDK client raises descends from `PipelineRequestError`, a non-2xx
+    answer from any route included (`ApiResponseError`). Nothing else is caught: an
+    unexpected exception crashes loudly with its traceback.
     """
     try:
         return asyncio.run(coro)
-    except (PipelineRequestError, httpx.HTTPStatusError) as exc:
+    except PipelineRequestError as exc:
         print_error(progress_console, present_error(exc))
         raise typer.Exit(1) from exc
     except KeyboardInterrupt as exc:

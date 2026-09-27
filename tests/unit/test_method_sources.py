@@ -7,8 +7,8 @@ through the same `POST /v1/codegen` call, which is the whole reason the manifest
 truth and `widget/generated/` stays purely derived.
 
 Everything here is filesystem and request-shape work — no key, no network. The failure translation
-the two scripts share (`explain`) is here too, because a failure reported as an httpx one-liner
-with a link to MDN is the shape both of them exist to avoid.
+the two scripts share (`explain`) is here too, because a failure reported without its route, its
+reason or its fix is the shape both of them exist to avoid.
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pytest
+from mthds.runners.api.problem import UserAction
 from pipelex_sdk.errors import ApiResponseError
 
 from widget.manifest import ManifestError, MethodSelector, read_manifest, write_manifest
@@ -128,23 +128,51 @@ class TestMethodSources:
     def test_dashes_become_underscores(self):
         assert codegen.generated_package_dir("summarize-pdf").name == "summarize_pdf"
 
-    def test_a_raw_protocol_route_error_is_translated_like_an_sdk_one(self):
-        """`validate` surfaces `httpx.HTTPStatusError`, not the SDK's class — both must read alike."""
-        request = httpx.Request("POST", "https://api.example.com/v1/validate")
-        exc = httpx.HTTPStatusError("nope", request=request, response=httpx.Response(403, request=request))
+    def test_a_protocol_route_refusal_names_the_route_and_the_key(self):
+        """`validate` is a protocol route, and it raises the SDK's typed error like a product route does."""
+        exc = ApiResponseError("nope", api_url="https://api.example.com", status=403, status_text="Forbidden", response_body="")
         message = codegen.explain(exc, "https://api.example.com", route="POST /v1/validate")
         assert "POST /v1/validate" in message
         assert "403" in message
         assert "may not use" in message
 
-    def test_an_unknown_status_still_names_the_route_and_the_server_message(self):
-        request = httpx.Request("POST", "https://api.example.com/v1/validate")
-        response = httpx.Response(422, request=request, text="method_ref is not supported here")
-        exc = httpx.HTTPStatusError("nope", request=request, response=response)
+    def test_an_unknown_status_names_the_route_the_reason_and_the_next_step(self):
+        exc = ApiResponseError(
+            "nope",
+            api_url="https://api.example.com",
+            status=422,
+            status_text="Unprocessable Entity",
+            response_body="",
+            server_message="method_ref is not supported here",
+            user_action=UserAction(kind="change_input", detail="Send the bundle's files instead."),
+        )
         message = codegen.explain(exc, "https://api.example.com", route="POST /v1/validate")
-        assert "422" in message
-        assert "method_ref is not supported here" in message
+        assert message == "HTTP 422 from POST /v1/validate — method_ref is not supported here\n    Next step: Send the bundle's files instead."
+
+    def test_a_plain_text_answer_is_still_the_reason(self):
+        exc = ApiResponseError(
+            "nope", api_url="https://api.example.com", status=422, status_text="Unprocessable Entity", response_body="not supported\n"
+        )
+        assert codegen.explain(exc, "https://api.example.com", route="POST /v1/validate") == "HTTP 422 from POST /v1/validate — not supported"
 
     def test_a_missing_route_sends_the_reader_to_the_base_url(self):
         exc = ApiResponseError("gone", api_url="https://api.example.com/v1/codegen", status=404, status_text="Not Found", response_body="")
         assert "PIPELEX_BASE_URL" in codegen.explain(exc, "https://api.example.com")
+
+    def test_a_404_the_route_itself_answered_is_not_a_missing_route(self):
+        """A `method_ref` whose package does not exist is a 404 carrying the runner's class, not a wrong base URL."""
+        exc = ApiResponseError(
+            "gone",
+            api_url="https://api.example.com",
+            status=404,
+            status_text="Not Found",
+            response_body="",
+            error_type="PackageNotFoundError",
+            server_message="No package at github.com/acme/nothing.",
+        )
+        message = codegen.explain(exc, "https://api.example.com", route="POST /v1/validate")
+        assert "PIPELEX_BASE_URL" not in message
+        assert message == "HTTP 404 from POST /v1/validate — No package at github.com/acme/nothing."
+
+    def test_a_failure_that_is_no_answer_reads_as_itself(self):
+        assert codegen.explain(OSError("disk full"), "https://api.example.com") == "disk full"
