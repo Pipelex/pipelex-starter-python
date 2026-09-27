@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from pipelex_sdk.error_models import RunErrorReport, UserAction
-from pipelex_sdk.errors import RunFailedError
+from pipelex_sdk.errors import ApiResponseError, RunFailedError
 from pipelex_sdk.runs import RunRead, RunResultCompleted, RunResultFailed, RunResultRunning, RunResults, RunStatus
 from pytest_mock import MockerFixture
 from typer.testing import CliRunner
@@ -121,6 +121,18 @@ class TestDetachedCli:
         assert start_mock.await_args is not None
         assert start_mock.await_args.kwargs["inputs"] == {"image_prompt": "a cat wearing a hat"}
         assert result.stdout.strip() == RUN_ID
+
+    def test_a_refused_start_prints_the_reason_the_pipe_and_the_next_step(self, mocker: MockerFixture, refused_start: ApiResponseError):
+        mocker.patch("widget.detached.cli.start_pipe", side_effect=refused_start)
+        result = runner.invoke(app, ["detached", "extract-entities", "some text"])
+        assert result.exit_code == 1
+        # No run was created, so nothing reaches stdout for `$(widget detached …)` to capture as an id.
+        assert result.stdout == ""
+        output = " ".join(result.output.split())
+        assert "The API answered 422 Unprocessable Entity." in output
+        assert "Reason: Validate bundle — Pipe 'draft_pitch' (PipeLLM), field 'model': Model handle 'gpt-5.1' was not found" in output
+        assert "Pipe: draft_pitch" in output
+        assert "Next step: Edit the bundle as each validation error says" in output
 
     def test_wait_prints_the_raw_main_stuff(self, mocker: MockerFixture):
         attend_mock = mocker.patch("widget.detached.cli.attend_run", return_value=_results(ENTITIES_CONTENT))

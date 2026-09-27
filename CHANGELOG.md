@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **`pipelex-sdk` 0.14.0 and `mthds` 0.17.0 are the floors, and `httpx` is no longer a dependency (Breaking)**: from `pipelex-sdk` 0.14.0 every route, `execute` and `start` among them, raises the typed `ApiResponseError` on a non-2xx answer, so each mode's `_run()` catches `PipelineRequestError` with no second arm for a raw `httpx.HTTPStatusError`, and nothing in the project parses one any more. Code copied from the starter that caught `httpx.HTTPStatusError` catches `ApiResponseError` and reads `exc.status` where it read `exc.response.status_code`.
+
+### Fixed
+
+- **A refused run says why, where and what to do**: a method the API refuses to run, met by `widget blocking …`, `widget attended …` or `widget detached …`, now prints the refusal's reason, the pipe or concept each of its validation errors names, the next step the server advises and whether running it again can succeed, the same lines a failed run prints, instead of the reason alone; a reason that spans lines hangs under its label. Any other refused request reads out its reason the same way, an authentication failure included, beside the API-key hint.
+- **`make codegen` and `make add-method` tell a missing route from a 404 the route answered**: a 404 carrying the runner's error class, such as a `method_ref` whose package does not exist, is reported with the server's reason instead of sending you to check `PIPELEX_BASE_URL`, and any other refused request prints the server's next step under its reason.
+
 ## [v0.1.1] - 2026-09-27
 
 ### Changed
