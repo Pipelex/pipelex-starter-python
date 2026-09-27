@@ -45,7 +45,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
-import httpx
 from dotenv import load_dotenv
 from pipelex_sdk.client import PipelexAPIClient
 from pipelex_sdk.codegen_writer import write_codegen_tree
@@ -198,19 +197,16 @@ def explain(exc: Exception, base_url: str, route: str = "POST /v1/codegen") -> s
 
     `route` is a parameter because `scripts/add_method.py` reuses this on `POST /v1/validate`, and a
     validate failure reported against the codegen route would send the reader to the wrong place.
+    Every route of the SDK, `validate` among the protocol ones, raises `ApiResponseError` on a
+    non-2xx answer, so that one class carries the status, the server's reason and its next step.
     """
-    status: int | None = None
-    server_message: str | None = None
-    if isinstance(exc, ApiResponseError):
-        status = exc.status
-        server_message = exc.server_message
-    elif isinstance(exc, httpx.HTTPStatusError):
-        # The protocol routes (`validate` among them) surface a raw httpx error rather than the
-        # SDK's own class, so without this arm their failures print as an httpx one-liner with a
-        # link to MDN and nothing about what to do next.
-        status = exc.response.status_code
-        server_message = exc.response.text.strip() or None
-    if status == 404:
+    if not isinstance(exc, ApiResponseError):
+        return str(exc)
+    status = exc.status
+    # A route this server lacks answers a bare 404, with neither the platform's `code` nor the
+    # runner's `error_type`. A 404 carrying either is an answer from the route itself — a
+    # `method_ref` whose package does not exist, say — and the base URL is not what to change.
+    if status == 404 and exc.code is None and exc.error_type is None:
         return (
             f"this base URL does not serve {route} (HTTP 404).\n"
             f"    Base URL: {base_url}\n"
@@ -220,15 +216,15 @@ def explain(exc: Exception, base_url: str, route: str = "POST /v1/codegen") -> s
     if status == 403:
         # Not a base-URL problem: a 403 on a product route is the platform's surface-access
         # gate, so sending the user to edit PIPELEX_BASE_URL would be the wrong advice.
-        discriminant = f" {exc.code}" if isinstance(exc, ApiResponseError) and exc.code else ""
+        discriminant = f" {exc.code}" if exc.code else ""
         return (
             f"PIPELEX_API_KEY may not use {route} (HTTP 403{discriminant}).\n"
             f"    Base URL: {base_url}\n"
             "    The key was recognised; this surface is not enabled for it."
         )
-    if status is not None:
-        return f"HTTP {status} from {route} — {server_message or exc}"
-    return str(exc)
+    reason = exc.server_message or exc.title or exc.error_type or exc.code or exc.response_body.strip() or exc.status_text
+    next_step = f"\n    Next step: {exc.user_action.detail}" if exc.user_action else ""
+    return f"HTTP {status} from {route} — {reason}{next_step}"
 
 
 async def generate_method(client: PipelexAPIClient, method: MethodSource) -> bool:

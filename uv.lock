@@ -192,7 +192,7 @@ wheels = [
 
 [[package]]
 name = "mthds"
-version = "0.16.0"
+version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -201,9 +201,9 @@ dependencies = [
     { name = "tomlkit" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/25/03/4aca733536f741f741d0cba3ae3d23dfd56f691c53a0d7e3e7baea371585/mthds-0.16.0.tar.gz", hash = "sha256:cc8f54bc76c9ed13273e7cd2e1c66767e5478fc3640a26481bf099451d56aa29", size = 259394, upload-time = "2026-09-23T12:13:31.752Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3a/51/e68684d8bea26098f6a03339f97084038dba54b778ad7d55a07b73763e38/mthds-0.17.0.tar.gz", hash = "sha256:7515dea7a014ed55416e428c29172a7482d674a12bad73d1222bc5090d4c669c", size = 276301, upload-time = "2026-09-27T13:08:43.234Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/00/a80f90f0ed7ddff9886f925fbb8dd0061ec0b0e1af49901971664f1a3e12/mthds-0.16.0-py3-none-any.whl", hash = "sha256:67468669451278e8c17409c5fed60eafab8453fd5cd92f333d788b21f7500ebe", size = 103813, upload-time = "2026-09-23T12:13:30.288Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/e2/dc57d0a6370546c2ef1563eacfdb5037c6f5d569c23f407d73acb0473c2e/mthds-0.17.0-py3-none-any.whl", hash = "sha256:cfd4530eb7760490489680edbbbaba448150086ac4b122ee272a64f271785ec4", size = 110748, upload-time = "2026-09-27T13:08:41.722Z" },
 ]
 
 [[package]]
@@ -283,7 +283,7 @@ wheels = [
 
 [[package]]
 name = "pipelex-sdk"
-version = "0.13.0"
+version = "0.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -291,9 +291,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0b/47/0baf77c28bd66fd76d7dfe41c56a2040a99a2f1fbdf12c81fd7538cba423/pipelex_sdk-0.13.0.tar.gz", hash = "sha256:2ad0a9f619742c99b23df7dc5a39fb1feb33ef633d249674e7c2958b03150107", size = 391622, upload-time = "2026-09-27T10:38:31.576Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/2b/d23ca062ba60fb78c38cc61c3741875ab68e134028cf09915bde5abf51f4/pipelex_sdk-0.14.0.tar.gz", hash = "sha256:ecafc6e4411a8fcaf8a66499e4620f80e7ee8de2f565996d051b49b40dbfb027", size = 402382, upload-time = "2026-09-27T13:53:45.2Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/5c/1929a77768c58a3e9917a7b811ed8cc2999abfdac3345f2252724baab0bd/pipelex_sdk-0.13.0-py3-none-any.whl", hash = "sha256:75b1fe64c4b4d8db56d602300da4da70c97d98b116f09fd17753232c7bc4498d", size = 132322, upload-time = "2026-09-27T10:38:30.21Z" },
+    { url = "https://files.pythonhosted.org/packages/bb/2a/41d43d66fea39fdf9ba0e721e6076e0f4e109cb0b54909b658b5619c114f/pipelex_sdk-0.14.0-py3-none-any.whl", hash = "sha256:5da67d3585f2e794c53e961ccd4c2ab8de4ea9a20197357689afd2a50c314e73", size = 134680, upload-time = "2026-09-27T13:53:43.693Z" },
 ]
 
 [[package]]
@@ -629,10 +629,9 @@ wheels = [
 
 [[package]]
 name = "widget"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
-    { name = "httpx" },
     { name = "mthds" },
     { name = "pipelex-sdk" },
     { name = "python-dotenv" },
@@ -642,6 +641,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "mypy" },
     { name = "pipelex-tools" },
     { name = "pyright" },
@@ -654,10 +654,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "mthds", specifier = ">=0.16.0" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
+    { name = "mthds", specifier = ">=0.17.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.19.1" },
-    { name = "pipelex-sdk", specifier = ">=0.13.0" },
+    { name = "pipelex-sdk", specifier = ">=0.14.0" },
     { name = "pipelex-tools", marker = "extra == 'dev'", specifier = ">=0.7.2" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.411" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
