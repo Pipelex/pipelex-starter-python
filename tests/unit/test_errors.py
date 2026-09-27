@@ -1,7 +1,10 @@
+import io
 from collections.abc import Mapping
 
 import httpx
+import pytest
 from pipelex_sdk.artifact_models import ArtifactScope, DownloadArtifactsResult
+from pipelex_sdk.error_models import RunErrorReport, UserAction
 from pipelex_sdk.errors import (
     ApiUnreachableError,
     ArtifactAuthenticationError,
@@ -16,8 +19,22 @@ from pipelex_sdk.errors import (
     UploadAuthenticationError,
 )
 from pipelex_sdk.runs import RunStatus
+from rich.console import Console
 
-from widget.errors import present_error
+from widget.errors import ErrorPresentation, present_error, print_error, report_lines
+
+# A failed run's stored report as the runner writes it for an inference failure, and the platform's
+# sentence about the run with and without one (`Run finished with status <STATUS>: <message>`).
+MODEL_REPORT = RunErrorReport(
+    error_type="LLMCompletionError",
+    title="LLM completion",
+    message="The model refused the request.",
+    error_domain="runtime",
+    retryable=True,
+    user_action=UserAction(kind="change_input", detail="Rephrase the prompt, or pick another model."),
+)
+REPORTED_DETAIL = "Run finished with status FAILED: The model refused the request."
+UNREPORTED_DETAIL = "Run finished with status FAILED; no result available"
 
 
 def _http_status_error(status_code: int, *, problem: Mapping[str, object] | None = None) -> httpx.HTTPStatusError:
@@ -87,11 +104,38 @@ class TestPresentError:
         assert presentation.hint is not None
         assert "PIPELEX_BASE_URL" in presentation.hint
 
-    def test_run_failed_names_run_id(self):
-        presentation = present_error(RunFailedError("run failed", run_id="run-9", status=RunStatus.FAILED))
-        assert "run-9" in presentation.message
+    def test_run_failed_reads_out_the_stored_report(self):
+        presentation = present_error(RunFailedError(REPORTED_DETAIL, run_id="run-9", status=RunStatus.FAILED, error=MODEL_REPORT))
+        assert presentation.message == "Run run-9 failed."
+        assert presentation.details == (
+            "Reason: LLM completion — The model refused the request.",
+            "Next step: Rephrase the prompt, or pick another model.",
+            "Retry: running it again may succeed.",
+        )
+        # The next step is the advice, so no hint sends the reader to a command that prints the same lines again.
+        assert presentation.hint is None
+
+    def test_run_failed_without_a_stored_report_still_says_what_happened(self):
+        presentation = present_error(RunFailedError(UNREPORTED_DETAIL, run_id="run-9", status=RunStatus.FAILED))
+        assert presentation.message == "Run run-9 failed, and no reason was recorded for it."
+        # The platform's own sentence is kept: on a refused stored result it is the only thing that says what happened.
+        assert presentation.details == (f"The platform said: {UNREPORTED_DETAIL}",)
         assert presentation.hint is not None
-        assert "widget detached status run-9" in presentation.hint
+        assert "support" in presentation.hint
+        assert "run-9" in presentation.hint
+
+    def test_a_cancelled_run_without_a_report_is_told_to_start_again(self):
+        presentation = present_error(
+            RunFailedError("Run finished with status CANCELLED; no result available", run_id="run-9", status=RunStatus.CANCELLED)
+        )
+        assert presentation.message == "Run run-9 was cancelled, and no reason was recorded for it."
+        assert presentation.hint is not None
+        assert "start it again" in presentation.hint.lower()
+
+    def test_a_report_carrying_nothing_to_read_out_is_treated_as_no_report(self):
+        presentation = present_error(RunFailedError(UNREPORTED_DETAIL, run_id="run-9", status=RunStatus.TIMED_OUT, error=RunErrorReport()))
+        assert presentation.message == "Run run-9 timed out, and no reason was recorded for it."
+        assert presentation.details == (f"The platform said: {UNREPORTED_DETAIL}",)
 
     def test_run_timeout_hints_wait(self):
         presentation = present_error(RunTimeoutError("too slow", run_id="run-9", timeout_seconds=1200.0))
@@ -135,3 +179,50 @@ class TestPresentError:
         assert "download directory" in presentation.hint
         # The run itself succeeded — a hint that sent the reader back to rerun it would cost them.
         assert "rerun" not in presentation.hint.lower()
+
+    @pytest.mark.parametrize(
+        ("report", "expected_lines"),
+        [
+            pytest.param(None, (), id="no report"),
+            pytest.param(RunErrorReport(message="The input 'text' is empty."), ("Reason: The input 'text' is empty.",), id="message alone"),
+            pytest.param(RunErrorReport(title="LLM completion"), ("Reason: LLM completion",), id="title alone"),
+            pytest.param(RunErrorReport(error_type="SandboxProvisioningError"), ("Reason: SandboxProvisioningError",), id="class as last resort"),
+            pytest.param(
+                RunErrorReport(message="Rate limited.", user_action=UserAction(kind="wait_and_retry")),
+                ("Reason: Rate limited.", "Next step: Wait a moment, then run it again."),
+                id="kind speaks without detail",
+            ),
+            pytest.param(
+                RunErrorReport(message="Something broke.", user_action=UserAction(kind="unknown")),
+                ("Reason: Something broke.",),
+                id="unknown kind without detail",
+            ),
+            pytest.param(
+                RunErrorReport(message="The model does not exist.", retryable=False),
+                ("Reason: The model does not exist.", "Retry: running it again will fail the same way until the cause is fixed."),
+                id="not retryable",
+            ),
+            # `None` means the runner does not know, never "no" — so nothing is claimed either way.
+            pytest.param(RunErrorReport(message="Something broke."), ("Reason: Something broke.",), id="retry advice unknown"),
+        ],
+    )
+    def test_report_lines_read_out_what_the_report_carries(self, report: RunErrorReport | None, expected_lines: tuple[str, ...]):
+        assert report_lines(report) == expected_lines
+
+    def test_print_error_prints_the_message_the_details_and_the_hint(self):
+        buffer = io.StringIO()
+        print_error(Console(file=buffer, width=200), ErrorPresentation(message="Run run-9 failed.", hint="Do this.", details=("Reason: it broke.",)))
+        rendered = buffer.getvalue()
+        assert "Error: Run run-9 failed." in rendered
+        assert "Reason: it broke." in rendered
+        assert "Hint: Do this." in rendered
+
+    def test_print_error_prints_server_text_verbatim_rather_than_as_markup(self):
+        # A report's message is the runner's text, provider wording included: a bracketed span in it
+        # must neither vanish as a style tag nor crash the print as an unmatched closing tag.
+        buffer = io.StringIO()
+        presentation = ErrorPresentation(message="Bad value [x] in [/y].", hint=None, details=("Reason: list [1, 2] [bold]",))
+        print_error(Console(file=buffer, width=200), presentation)
+        rendered = buffer.getvalue()
+        assert "Bad value [x] in [/y]." in rendered
+        assert "Reason: list [1, 2] [bold]" in rendered

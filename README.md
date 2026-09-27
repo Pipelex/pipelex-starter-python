@@ -233,7 +233,7 @@ Same durable run, but `widget` exits as soon as it has the id — on stdout, so 
 
 ```bash
 RUN_ID=$(uv run widget detached generate-image "a fox reading under a tree")
-uv run widget detached status $RUN_ID    # where is it now? (no waiting)
+uv run widget detached status $RUN_ID    # where is it now, and why did it fail if it did? (no waiting)
 uv run widget detached result $RUN_ID    # its result, if it is done (no waiting)
 uv run widget detached wait   $RUN_ID    # block until it is done, then print the result
 ```

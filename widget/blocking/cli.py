@@ -25,7 +25,7 @@ from rich.console import Console
 # add-method:imports — `make add-method` inserts a scaffolded method's generated-model import
 # into the block below, in sorted position. Keep the token; the prose after it is free.
 from widget.artifacts import DEFAULT_DOWNLOAD_DIR, download_produced_files, print_downloads
-from widget.errors import present_error
+from widget.errors import present_error, print_error
 from widget.generated.extract_entities.models import ExtractedEntities
 from widget.generated.generate_image.models import Image
 from widget.generated.summarize_pdf.models import DocumentSummary
@@ -154,10 +154,7 @@ def _run(coro: Coroutine[Any, Any, ResultT]) -> ResultT:
     try:
         return asyncio.run(coro)
     except (PipelineRequestError, httpx.HTTPStatusError) as exc:
-        presentation = present_error(exc)
-        progress_console.print(f"[red]Error:[/red] {presentation.message}")
-        if presentation.hint:
-            progress_console.print(f"\n[yellow]Hint:[/yellow] {presentation.hint}")
+        print_error(progress_console, present_error(exc))
         raise typer.Exit(1) from exc
     except KeyboardInterrupt as exc:
         raise typer.Exit(130) from exc
