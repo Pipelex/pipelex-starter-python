@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **`pipelex-sdk` 0.14.0 and `mthds` 0.17.0 are the floors, and `httpx` is no longer a dependency (Breaking)**: from `pipelex-sdk` 0.14.0 every route, `execute` and `start` among them, raises the typed `ApiResponseError` on a non-2xx answer, so each mode's `_run()` catches `PipelineRequestError` alone and nothing in the project catches or parses a raw `httpx.HTTPStatusError` any more. Code copied from the starter that caught `httpx.HTTPStatusError` catches `ApiResponseError` and reads `exc.status` where it read `exc.response.status_code`.
+- **`pipelex-sdk` 0.14.0 and `mthds` 0.17.0 are the floors, and `httpx` is no longer a dependency (Breaking)**: from `pipelex-sdk` 0.14.0 every route, `execute` and `start` among them, raises the typed `ApiResponseError` on a non-2xx answer, so each mode's `_run()` catches `PipelineRequestError` with no second arm for a raw `httpx.HTTPStatusError`, and nothing in the project parses one any more. Code copied from the starter that caught `httpx.HTTPStatusError` catches `ApiResponseError` and reads `exc.status` where it read `exc.response.status_code`.
 
 ### Fixed
 

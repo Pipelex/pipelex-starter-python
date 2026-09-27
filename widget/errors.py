@@ -2,11 +2,13 @@
 
 This module defines no exception classes — it is a presentation mapper. Each mode
 package's `_run()` wrapper (`widget/blocking/cli.py`, `widget/attended/cli.py`,
-`widget/detached/cli.py`) catches `PipelineRequestError` (the base of every error the
-`pipelex-sdk` client raises) exactly once, turns it into an `ErrorPresentation` here —
+`widget/detached/cli.py`) catches `PipelineRequestError` (the base of the typed errors
+the `pipelex-sdk` client raises) exactly once, turns it into an `ErrorPresentation` here —
 a message, the lines that explain it, and a hint — prints it with `print_error`, and
 exits non-zero. Unexpected exceptions are deliberately NOT caught anywhere: they crash
-loudly with a full traceback.
+loudly with a full traceback, and so, for now, does a connection that fails on `execute`
+or `start`, which the SDK passes through as httpx's own transport error rather than as
+`ApiUnreachableError`.
 
 A run that ended without a result is presented from the error report the runner stored
 when it failed, which the SDK hands back typed as `RunErrorReport`: `report_lines` reads

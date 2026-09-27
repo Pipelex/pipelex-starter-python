@@ -242,9 +242,11 @@ def _print_results(results: RunResults) -> None:
 def _run(coro: Coroutine[Any, Any, ResultT]) -> ResultT:
     """Await the lifecycle, presenting SDK errors and Ctrl-C as clean exits.
 
-    Every error the SDK client raises descends from `PipelineRequestError`, a non-2xx
-    answer from any route included (`ApiResponseError`). Nothing else is caught: an
-    unexpected exception crashes loudly with its traceback.
+    The SDK's typed errors descend from `PipelineRequestError`, a non-2xx answer from any
+    route included (`ApiResponseError`). A connection that fails on `execute` or `start` is
+    the exception: the SDK lets httpx's own transport error through from those two routes,
+    so it crashes with its traceback like any unexpected exception, since nothing else is
+    caught here.
     """
     try:
         return asyncio.run(coro)
