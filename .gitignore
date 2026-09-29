@@ -31,8 +31,3 @@ results/
 downloads/
 
 temp/
-
-# Internal planning notes and campaign documents — never shipped to template
-# consumers (v0.11.0 already removed them once before open-sourcing). They live
-# in the workspace wip repository instead; anything left here stays local.
-/wip/
