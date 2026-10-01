@@ -1,5 +1,7 @@
 # Agent instructions — pipelex-starter-python
 
+> **This repository is frozen for its move into `Pipelex/pipelex-sdk`** (epic L-261001-a2fd94, plan in the workspace root's `wip/sdk-monorepo/plan.md`). Open no new branch here and claim no ledger item this repository owns: those items are re-owned to the new repository when the import lands, and the work happens there.
+
 The full project guide for AI coding agents is [`CLAUDE.md`](CLAUDE.md) — read it; everything there applies regardless of which agent you are. The rules below are the ones that cause real damage when missed:
 
 - **Never edit anything under `widget/generated/`** — not even a reformat. Every artifact carries a stamp with its own content hash and a sibling `codegen.lock` hashes them all, so any edit makes `tests/unit/test_generated_clients.py` fail with a drift report. Customize by wrapping the model from your own code instead. Relatedly, `widget/generated` is excluded from ruff on purpose and is fully type-checked on purpose — do not "fix" either.
