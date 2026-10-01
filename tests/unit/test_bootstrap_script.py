@@ -33,7 +33,9 @@ def job_conditions(workflow: Path) -> dict[str, str | None]:
 
     Read from the layout every workflow here shares — job keys two spaces in under `jobs:`, their
     fields four — rather than parsed, which keeps a YAML library out of the dependencies for one
-    test. A job whose `if:` sits anywhere else reads as unguarded, which fails loudly below."""
+    test. A job whose `if:` sits anywhere else reads as unguarded, which fails loudly below, and a
+    line two spaces in that is neither a job key nor a comment fails here: skipped, it would hide
+    a job or hand it the `if:` of the job above."""
     jobs: dict[str, str | None] = {}
     in_jobs = False
     current = ""
@@ -42,9 +44,11 @@ def job_conditions(workflow: Path) -> dict[str, str | None]:
             in_jobs = True
         elif in_jobs and line and not line[0].isspace() and not line.startswith("#"):
             in_jobs = False
-        elif in_jobs and (job := re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)):
+        elif in_jobs and (job := re.match(r"^  ([A-Za-z0-9_-]+):\s*(?:#.*)?$", line)):
             current = job.group(1)
             jobs[current] = None
+        elif in_jobs and re.match(r"^  [^\s#]", line):
+            pytest.fail(f"{workflow.name}: cannot read {line.strip()!r} under `jobs:` as a job key")
         elif in_jobs and current and (condition := re.match(r"^    if:\s*(.+)$", line)):
             jobs[current] = re.sub(r"\s+#.*$", "", condition.group(1)).strip()
     return jobs
@@ -476,3 +480,22 @@ def test_the_workflows_the_bootstrap_removes_are_exactly_the_guarded_ones() -> N
 )
 def test_the_guard_reading_refuses_a_guard_an_or_escapes(condition: str | None, expected: bool) -> None:
     assert is_guarded_to_the_template(condition) is expected
+
+
+def test_the_job_reading_sees_a_commented_key_and_refuses_an_unreadable_one(tmp_path: Path) -> None:
+    workflow = tmp_path / "workflow.yml"
+    workflow.write_text(
+        f"""jobs:
+  # ── a banner between jobs ──
+  first:
+    if: {TEMPLATE_REPOSITORY_GUARD}
+  notify:  # a comment on the key
+    runs-on: ubuntu-latest
+""",
+        encoding="utf-8",
+    )
+    assert job_conditions(workflow) == {"first": TEMPLATE_REPOSITORY_GUARD, "notify": None}
+
+    workflow.write_text('jobs:\n  "quoted":\n    runs-on: ubuntu-latest\n', encoding="utf-8")
+    with pytest.raises(pytest.fail.Exception, match="cannot read"):
+        job_conditions(workflow)
