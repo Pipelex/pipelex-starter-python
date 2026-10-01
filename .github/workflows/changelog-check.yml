@@ -1,3 +1,8 @@
+# The template's own maintenance, not a project's: every job runs only in
+# Pipelex/pipelex-starter-python, so a repository made with "Use this template" inherits
+# this file inert, and /bootstrap deletes it. A workflow added for the template's own
+# maintenance carries the same guard on every job and joins MAINTAINER_ONLY_PATHS in the
+# bootstrap script; tests/unit/test_bootstrap_script.py holds the two together.
 name: Changelog Version Check
 
 on:
@@ -9,7 +14,7 @@ on:
 jobs:
   check-changelog:
     runs-on: ubuntu-latest
-    if: startsWith(github.head_ref, 'release/v')  # Only run on release branches
+    if: github.repository == 'Pipelex/pipelex-starter-python' && startsWith(github.head_ref, 'release/v')  # Only run on the template's release branches
     steps:
       - uses: actions/checkout@v4
 

@@ -16,13 +16,15 @@ Each prints its result as JSON on stdout, and a short **cost report** (per-call 
 
 This is a template repository — don't clone it directly. Click the green **Use this template** button at the top-right of the GitHub page to create your own repo, then clone that.
 
-**Make it yours.** The fastest path is the bundled `/bootstrap` skill: open your new repo in [Claude Code](https://claude.com/claude-code) and run `/bootstrap`. It renames the placeholder (`widget` → your project name) everywhere — the package directory, `pyproject.toml`, the CLI command, imports, README, and LICENSE — then regenerates the lock file and runs the checks. Just answer its prompts (project name, description, license).
+**Make it yours.** The fastest path is the bundled `/bootstrap` skill: open your new repo in [Claude Code](https://claude.com/claude-code) and run `/bootstrap`. It renames the placeholder (`widget` → your project name) everywhere — the package directory, `pyproject.toml`, the CLI command, imports, README, and LICENSE — removes the template's own CLA and release workflows, then regenerates the lock file and runs the checks. Just answer its prompts (project name, description, license).
 
 Prefer to do it by hand? The manual equivalent:
 1. In `pyproject.toml`, replace `widget` with your project name — dashes in `[project] name` and the `[project.scripts]` command, underscores in `[tool.setuptools] packages`, `[tool.mypy] packages`, and `[tool.pyright] include`.
 2. Rename the `widget/` directory to your package name (underscores).
 3. Update the imports across `widget/` and `tests/` to match.
 4. Rewrite this README with your own project details.
+5. Delete the template's own maintenance: `cla.yml`, `guard-branches.yml`, `version-check.yml`, `changelog-check.yml` and `github-release.yml` under `.github/workflows/`, and the `.claude/skills/release/` skill. Their jobs run only in `Pipelex/pipelex-starter-python`, so they do nothing in your repository, but they are Pipelex's contributor agreement and release discipline rather than yours. Keep `lint-check.yml`, `tests-check.yml` and `package-check.yml`: they are your project's CI.
+6. Delete the bootstrap skill, `.claude/skills/bootstrap/`, and its test, `tests/unit/test_bootstrap_script.py`, as the skill does once it has run. The steps above replace it, and the test holds the workflows to the template's own layout, which yours need not follow.
 
 ## Prerequisites
 
