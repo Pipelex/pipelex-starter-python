@@ -1,5 +1,7 @@
 # Widget ⚡️
 
+> **This template will be generated from [`Pipelex/pipelex-sdk`](https://github.com/Pipelex/pipelex-sdk).** Its source is moving to that repository's `starter-python/` directory, and each release there will update this repository's `main`, so "Use this template" keeps working here. Version 0.2.1 is the last release made in this repository, and new work waits for the move rather than starting here.
+
 *Replace "Widget" with your actual project name*
 
 A minimal Python CLI starter that calls the [Pipelex](https://pipelex.com) API via the [`pipelex-sdk`](https://pypi.org/project/pipelex-sdk/) SDK to run AI methods (`.mthds` bundles) — no local Pipelex runtime required.
