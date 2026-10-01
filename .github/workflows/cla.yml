@@ -1,6 +1,8 @@
 # The template's own maintenance, not a project's: every job runs only in
 # Pipelex/pipelex-starter-python, so a repository made with "Use this template" inherits
-# this file inert, and /bootstrap deletes it.
+# this file inert, and /bootstrap deletes it. A workflow added for the template's own
+# maintenance carries the same guard on every job and joins MAINTAINER_ONLY_PATHS in the
+# bootstrap script; tests/unit/test_bootstrap_script.py holds the two together.
 name: "CLA Assistant bot"
 on:
   issue_comment:
