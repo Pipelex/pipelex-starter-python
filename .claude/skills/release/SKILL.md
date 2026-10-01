@@ -14,7 +14,7 @@ description: >
 
 # Releasing pipelex-starter-python
 
-The procedure is the workspace release play, [`docs/releasing.md`](../../../../docs/releasing.md) at the workspace root — read it first, then run it with what follows. The repo key is `pipelex-starter-python`, the base is `dev`, and the pull request targets `main`: `guard-branches.yml`'s `gate-main` job refuses any head branch but `release/vX.Y.Z` into `main`, so there is no other way in. The release worktree is `_pipelex-starter-python--release`, made with `wt add pipelex-starter-python release --branch release/vX.Y.Z`. The repo declares neither `.worktree.toml` nor `.worktreeinclude`, so `wt` resolves the base from `origin/dev` and provisions with the Makefile's `install` target, which is what creates the `.venv` every gate below runs out of.
+The procedure is the workspace release play, [`docs/workspace/releasing.md`](../../../../docs/workspace/releasing.md) at the workspace root — read it first, then run it with what follows. The repo key is `pipelex-starter-python`, the base is `dev`, and the pull request targets `main`: `guard-branches.yml`'s `gate-main` job refuses any head branch but `release/vX.Y.Z` into `main`, so there is no other way in. The release worktree is `_pipelex-starter-python--release`, made with `wt add pipelex-starter-python release --branch release/vX.Y.Z`. The repo declares neither `.worktree.toml` nor `.worktreeinclude`, so `wt` resolves the base from `origin/dev` and provisions with the Makefile's `install` target, which is what creates the `.venv` every gate below runs out of.
 
 ## What ships
 
@@ -24,7 +24,7 @@ The procedure is the workspace release play, [`docs/releasing.md`](../../../../d
 
 Two things about that job are worth knowing before the merge:
 
-- **It is unguarded.** Nothing checks whether the Release or the tag already exists, so a push to `main` carrying no version bump fails at `gh release create`, and re-running a run whose Release was already created fails the same way. Once a version has shipped, the way forward is a new version, not a re-run.
+- **It is not idempotent.** Nothing checks whether the Release or the tag already exists, so a push to `main` carrying no version bump fails at `gh release create`, and re-running a run whose Release was already created fails the same way. Once a version has shipped, the way forward is a new version, not a re-run.
 - **A missing changelog entry does not fail it.** When no `## [vX.Y.Z] - ` heading matches the version, the extraction step prints a warning, sets the notes empty and exits 0, so the Release ships carrying the bare line `Release vX.Y.Z`. `changelog-check.yml` on the pull request is the only thing standing between a forgotten entry and that outcome.
 
 The landing verifies the publish — the run, the Release, the tag:
@@ -55,7 +55,9 @@ Run in the worktree, in this order, before the commit:
 
 ## CI on the release pull request
 
-- `guard-branches.yml` — the `gate-main` job asserts the head branch into `main` matches `^release/v[0-9]+\.[0-9]+\.[0-9]+$` exactly. Its `protect-workflows` job additionally refuses a change under `.github/workflows/` from an author whose association is `CONTRIBUTOR`.
+The template's own workflows — `guard-branches.yml`, `version-check.yml`, `changelog-check.yml`, `cla.yml` and the `github-release.yml` above — guard every job with `if: github.repository == 'Pipelex/pipelex-starter-python' && …`, so a repository made with "Use this template" inherits them inert, and the bootstrap deletes them together with this skill (its `MAINTAINER_ONLY_PATHS`). A job added to one of them carries the same guard, and so does every job of a new workflow written for the template's own maintenance, which also joins `MAINTAINER_ONLY_PATHS`: `tests/unit/test_bootstrap_script.py` fails when the guards and the list disagree, but it cannot tell that a new workflow carrying neither is the template's own, so that call is the author's. Here the guard always holds, so it changes nothing about what follows; the required checks they post keep posting.
+
+- `guard-branches.yml` — the `gate-main` job asserts the head branch into `main` matches `^release/v[0-9]+\.[0-9]+\.[0-9]+$` exactly. Its `protect-workflows` job additionally refuses a change under `.github/workflows/` from an author without write access to the repository, reading the author's effective permission and the pull request's own file list from the API.
 - `version-check.yml` — the `pyproject.toml` version equals the version in the branch name. That is all it compares: it never checks the number against what `main` already carries, so a re-used or lower version passes here and fails after the merge, at `gh release create`. A head that is not a release branch does not slip past either — the `exit 0` in its first step ends that step alone, and the comparison that follows then fails on an empty branch version.
 - `changelog-check.yml` — `CHANGELOG.md` carries a `## [vX.Y.Z] - ` heading for the version in the branch name. It asserts nothing about `[Unreleased]`; leaving none behind is the play's rule, not CI's.
 - `lint-check.yml` — `merge-check-ruff-format`, `merge-check-ruff-lint` (which pulls in `check-unused-imports`), `merge-check-pyright` and `merge-check-mypy` on each Python version in the matrix; the aggregator job `Lint (all versions)` is the single required status.

@@ -1,3 +1,8 @@
+# The template's own maintenance, not a project's: every job runs only in
+# Pipelex/pipelex-starter-python, so a repository made with "Use this template" inherits
+# this file inert, and /bootstrap deletes it. A workflow added for the template's own
+# maintenance carries the same guard on every job and joins MAINTAINER_ONLY_PATHS in the
+# bootstrap script; tests/unit/test_bootstrap_script.py holds the two together.
 name: Create release
 
 on:
@@ -8,6 +13,7 @@ on:
 jobs:
   github-release:
     name: Create GitHub Release
+    if: github.repository == 'Pipelex/pipelex-starter-python'
     runs-on: ubuntu-latest
     permissions:
       contents: write # IMPORTANT: mandatory for making GitHub Releases
