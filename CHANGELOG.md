@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A project made from the template no longer runs Pipelex's own workflows**: the CLA assistant, the branch-flow guard, the release version and changelog checks and the GitHub Release job run only in `Pipelex/pipelex-starter-python`, so a repository created with "Use this template" no longer fails every pull request for want of the CLA app's secrets or asks its contributors to sign Pipelex's CLA. `/bootstrap` now deletes those workflows and the template's `release` skill, and keeps `lint-check.yml`, `tests-check.yml` and `package-check.yml` as the project's CI; a project made earlier deletes the same files by hand.
+
 ## [v0.2.0] - 2026-09-27
 
 ### Changed

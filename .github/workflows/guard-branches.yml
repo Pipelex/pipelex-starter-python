@@ -1,3 +1,6 @@
+# The template's own maintenance, not a project's: every job runs only in
+# Pipelex/pipelex-starter-python, so a repository made with "Use this template" inherits
+# this file inert, and /bootstrap deletes it.
 name: Guard branch flow
 on:
   pull_request_target:
@@ -8,7 +11,7 @@ jobs:
   # 1) Only release/vX.Y.Z → main
   # ───────────────────────────────────────────────────────────────
   gate-main:
-    if: github.event.pull_request.base.ref == 'main'
+    if: github.repository == 'Pipelex/pipelex-starter-python' && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - name: Verify source branch is a Release
@@ -25,7 +28,7 @@ jobs:
   # 2) Only work-branches → release/vX.Y.Z
   # ───────────────────────────────────────────────────────────────
   gate-release:
-    if: startsWith(github.event.pull_request.base.ref, 'release/v') || github.event.pull_request.base.ref == 'dev'
+    if: github.repository == 'Pipelex/pipelex-starter-python' && (startsWith(github.event.pull_request.base.ref, 'release/v') || github.event.pull_request.base.ref == 'dev')
     runs-on: ubuntu-latest
     steps:
       - name: Verify source branch uses allowed prefix
@@ -47,7 +50,7 @@ jobs:
   protect-workflows:
     runs-on: ubuntu-latest
     # only block non-maintainers
-    if: github.event.pull_request.author_association == 'CONTRIBUTOR'
+    if: github.repository == 'Pipelex/pipelex-starter-python' && github.event.pull_request.author_association == 'CONTRIBUTOR'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

@@ -1,3 +1,6 @@
+# The template's own maintenance, not a project's: every job runs only in
+# Pipelex/pipelex-starter-python, so a repository made with "Use this template" inherits
+# this file inert, and /bootstrap deletes it.
 name: Version check
 
 on:
@@ -6,6 +9,7 @@ on:
       - main
 jobs:
   version-check:
+    if: github.repository == 'Pipelex/pipelex-starter-python'
     runs-on: ubuntu-latest
     steps:
       - name: Get branch info
